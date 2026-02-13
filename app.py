@@ -262,16 +262,16 @@ if not lab_forecast_chart.empty:
         secondary_y=True,
     )
 
-# TODAY marker
-fig.add_vline(
-    x=today.isoformat(),
-    line_width=2,
-    line_dash="dash",
-    line_color="#e74c3c",
-    annotation_text="TODAY",
-    annotation_position="top",
-    annotation_font_color="#e74c3c",
-    annotation_font_size=12,
+# TODAY marker (shape + annotation to avoid Plotly vline bug with dates)
+today_str = today.strftime("%Y-%m-%d")
+fig.add_shape(
+    type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
+    line=dict(color="#e74c3c", width=2, dash="dash"),
+)
+fig.add_annotation(
+    x=today_str, y=1.05, yref="paper",
+    text="TODAY", showarrow=False,
+    font=dict(size=12, color="#e74c3c"),
 )
 
 # Lag annotation
@@ -364,15 +364,15 @@ if remaining:
     # Mark stockout day
     stockout_day = kpis.get("stockout_day")
     if stockout_day is not None:
-        fig_burn.add_vline(
-            x=pd.Timestamp(stockout_day).isoformat(),
-            line_width=2,
-            line_dash="dash",
-            line_color="#e74c3c",
-            annotation_text="STOCKOUT",
-            annotation_position="top",
-            annotation_font_color="#e74c3c",
-            annotation_font_size=11,
+        so_str = pd.Timestamp(stockout_day).strftime("%Y-%m-%d")
+        fig_burn.add_shape(
+            type="line", x0=so_str, x1=so_str, y0=0, y1=1, yref="paper",
+            line=dict(color="#e74c3c", width=2, dash="dash"),
+        )
+        fig_burn.add_annotation(
+            x=so_str, y=1.05, yref="paper",
+            text="STOCKOUT", showarrow=False,
+            font=dict(size=11, color="#e74c3c"),
         )
 
     fig_burn.update_layout(
