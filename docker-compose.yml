@@ -1,0 +1,11 @@
+services:
+  labpulse:
+    build: .
+    container_name: labpulse-ai
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    mem_limit: 512m
+    cpus: 1.0
+    environment:
+      - TZ=Europe/Berlin

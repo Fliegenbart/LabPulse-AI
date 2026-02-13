@@ -197,7 +197,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-today = pd.Timestamp(datetime.today().normalize())
+today = pd.Timestamp(datetime.today()).normalize()
 chart_start = today - pd.Timedelta(days=120)
 
 ww_chart = wastewater_df[wastewater_df["date"] >= chart_start].copy()
