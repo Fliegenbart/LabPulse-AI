@@ -314,6 +314,31 @@ if "uploaded_lab_data" not in st.session_state:
 if "alert_webhook_url" not in st.session_state:
     st.session_state.alert_webhook_url = ""
 
+# Per-kit inventory — initialize with defaults
+# Unique kits (some pathogens share the same kit)
+UNIQUE_KITS = {
+    "SARS-CoV-2 PCR Kit": {"cost": 45, "pathogens": ["SARS-CoV-2"], "default_stock": 5000, "unit": "Tests", "lieferzeit_tage": 5},
+    "Influenza A/B PCR Panel": {"cost": 38, "pathogens": ["Influenza A", "Influenza B", "Influenza (gesamt)"], "default_stock": 3000, "unit": "Tests", "lieferzeit_tage": 3},
+    "RSV PCR Kit": {"cost": 42, "pathogens": ["RSV"], "default_stock": 2000, "unit": "Tests", "lieferzeit_tage": 4},
+}
+
+if "kit_inventory" not in st.session_state:
+    st.session_state.kit_inventory = {
+        kit_name: info["default_stock"] for kit_name, info in UNIQUE_KITS.items()
+    }
+
+def get_kit_for_pathogen(pathogen: str) -> str:
+    """Return the kit name for a given pathogen."""
+    for kit_name, info in UNIQUE_KITS.items():
+        if pathogen in info["pathogens"]:
+            return kit_name
+    return "SARS-CoV-2 PCR Kit"  # fallback
+
+def get_stock_for_pathogen(pathogen: str) -> int:
+    """Return current stock for the kit associated with a pathogen."""
+    kit = get_kit_for_pathogen(pathogen)
+    return st.session_state.kit_inventory.get(kit, 5000)
+
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -343,73 +368,60 @@ with st.sidebar:
         )
 
     st.markdown("")
-    st.markdown('<div class="sidebar-label">Prognose-Konfiguration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-label">Prognose</div>', unsafe_allow_html=True)
     forecast_horizon = st.slider(
-        "Prognose-Horizont (Tage)", min_value=7, max_value=21, value=14, step=7
+        "Horizont (Tage)", min_value=7, max_value=21, value=14, step=7
     )
     safety_buffer = st.slider(
         "Sicherheitspuffer (%)", min_value=0, max_value=30, value=10, step=5
     )
-    stock_on_hand = st.number_input(
-        "Aktueller Reagenzbestand (Einheiten)", min_value=0, value=5000, step=500
-    )
-
-    # ML Model toggle
-    st.markdown("")
-    st.markdown('<div class="sidebar-label">Prognosemodell</div>', unsafe_allow_html=True)
     use_ml = st.toggle("ML-Prognose (Prophet)", value=False, help="Prophet Time-Series statt einfacher 14-Tage-Verschiebung")
 
     st.markdown("")
-    st.markdown('<div class="sidebar-label">Stresstest</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-label">Simulation</div>', unsafe_allow_html=True)
     scenario_uplift = st.slider(
         "Viruslast-Uplift (%)",
         min_value=0, max_value=50, value=0, step=5,
         help="Simuliert einen ploetzlichen Anstieg.",
     )
 
-    # CSV Upload
-    st.markdown("")
-    st.markdown('<div class="sidebar-label">Reale Labordaten</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "CSV hochladen (date, test_volume)",
-        type=["csv"],
-        label_visibility="collapsed",
-    )
-    if uploaded_file is not None:
-        is_valid, msg, real_df = validate_csv(uploaded_file)
-        if is_valid:
-            st.session_state.uploaded_lab_data = real_df
-            st.success(msg)
-        else:
-            st.error(msg)
+    # Data import
+    with st.expander("Datenimport & Einstellungen", expanded=False):
+        st.markdown('<div class="sidebar-label">Reale Labordaten</div>', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader(
+            "CSV hochladen (date, test_volume)",
+            type=["csv"],
+            label_visibility="collapsed",
+        )
+        if uploaded_file is not None:
+            is_valid, msg, real_df = validate_csv(uploaded_file)
+            if is_valid:
+                st.session_state.uploaded_lab_data = real_df
+                st.success(msg)
+            else:
+                st.error(msg)
 
-    # Alert Config
-    st.markdown("")
-    st.markdown('<div class="sidebar-label">Benachrichtigungen</div>', unsafe_allow_html=True)
-    alert_webhook = st.text_input(
-        "Webhook-URL (Slack/Teams)",
-        value=st.session_state.alert_webhook_url,
-        placeholder="https://hooks.slack.com/...",
-        label_visibility="collapsed",
-    )
-    st.session_state.alert_webhook_url = alert_webhook
+        st.markdown('<div class="sidebar-label">Benachrichtigungen</div>', unsafe_allow_html=True)
+        alert_webhook = st.text_input(
+            "Webhook-URL (Slack/Teams)",
+            value=st.session_state.alert_webhook_url,
+            placeholder="https://hooks.slack.com/...",
+            label_visibility="collapsed",
+        )
+        st.session_state.alert_webhook_url = alert_webhook
 
     st.markdown("")
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        refresh = st.button("Daten laden", use_container_width=True, type="secondary")
-        if refresh:
-            st.cache_data.clear()
-            raw_df = load_raw()
-    with col_btn2:
-        # PDF button placeholder — actual download is in main area
-        pass
+    refresh = st.button("Daten neu laden", use_container_width=True, type="secondary")
+    if refresh:
+        st.cache_data.clear()
+        raw_df = load_raw()
 
     st.markdown("")
     st.caption(f"Letzter Sync: {datetime.now().strftime('%H:%M')} · RKI AMELAG")
 
 
 # ── Load Pathogen-Specific Data ──────────────────────────────────────────────
+stock_on_hand = get_stock_for_pathogen(selected_pathogen)
 wastewater_df = fetch_rki_wastewater(raw_df, pathogen=selected_pathogen)
 lab_df = generate_lab_volume(wastewater_df, lag_days=14, pathogen=selected_pathogen)
 
@@ -455,7 +467,7 @@ st.markdown(
         <div class="app-header-icon">🧬</div>
         <div class="app-header-text">
             <h1>LabPulse AI</h1>
-            <p>Predictive Supply Chain Control · Powered by RKI Wastewater Surveillance</p>
+            <p>Reagenz-Bedarfsprognose · RKI Abwassersurveillance · Ganzimmun Diagnostics</p>
         </div>
     </div>
     """,
@@ -464,25 +476,87 @@ st.markdown(
 
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
-tab_overview, tab_detail, tab_regional, tab_signals = st.tabs([
-    "Uebersicht", "Pathogen-Analyse", "Regionale Analyse", "Externe Signale"
+tab_overview, tab_detail, tab_regional, tab_trends = st.tabs([
+    "Uebersicht", "Pathogen-Analyse", "Regionale Analyse", "Google Trends"
 ])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1: OVERVIEW (Multi-Pathogen Sparklines)
+# TAB 1: OVERVIEW (Inventory Dashboard + Multi-Pathogen Cards)
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_overview:
-    st.markdown('<div class="section-header">Alle Pathogene auf einen Blick</div>', unsafe_allow_html=True)
+
+    # ── Inventory Dashboard ───────────────────────────────────────────────────
+    st.markdown('<div class="section-header">Bestandsverwaltung — Testkits</div>', unsafe_allow_html=True)
+    st.caption("Aktuelle Lagerbestaende pro Testkit eingeben. Die Prognose passt sich automatisch an.")
+
+    kit_cols = st.columns(len(UNIQUE_KITS), gap="medium")
+    for idx, (kit_name, kit_info) in enumerate(UNIQUE_KITS.items()):
+        with kit_cols[idx]:
+            current_stock = st.session_state.kit_inventory.get(kit_name, kit_info["default_stock"])
+
+            # Compute demand for this kit across all its pathogens
+            kit_demand_7d = 0
+            for p in kit_info["pathogens"]:
+                try:
+                    ww_tmp = fetch_rki_wastewater(raw_df, pathogen=p)
+                    lab_tmp = generate_lab_volume(ww_tmp, lag_days=14, pathogen=p)
+                    _, p_kpis_tmp = build_forecast(lab_tmp, pathogen=p, stock_on_hand=current_stock)
+                    kit_demand_7d += p_kpis_tmp.get("predicted_tests_7d", 0)
+                except Exception:
+                    pass
+
+            # Stock health
+            days_coverage = int(current_stock / (kit_demand_7d / 7)) if kit_demand_7d > 0 else 99
+            if days_coverage >= 14:
+                stock_color = "#22c55e"
+                stock_label = f"{days_coverage}d Reichweite"
+            elif days_coverage >= 7:
+                stock_color = "#f77f00"
+                stock_label = f"{days_coverage}d Reichweite"
+            else:
+                stock_color = "#ef4444"
+                stock_label = f"KRITISCH — {days_coverage}d"
+
+            st.markdown(
+                f'<div class="sparkline-card">'
+                f'<div class="sparkline-title">{kit_name}</div>'
+                f'<div style="color: var(--text-muted); font-size: 0.68rem; margin: 0.2rem 0;">'
+                f'EUR {kit_info["cost"]}/Test · Lieferzeit: {kit_info["lieferzeit_tage"]} Tage'
+                f'</div>'
+                f'<div style="color: {stock_color}; font-size: 0.78rem; font-weight: 600; margin: 0.3rem 0;">'
+                f'{stock_label}</div>'
+                f'<div style="color: var(--text-muted); font-size: 0.68rem;">'
+                f'Bedarf 7d: {kit_demand_7d:,} · Pathogene: {", ".join(kit_info["pathogens"])}'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            new_stock = st.number_input(
+                f"Bestand {kit_name}",
+                min_value=0,
+                value=current_stock,
+                step=500,
+                key=f"stock_{kit_name}",
+                label_visibility="collapsed",
+            )
+            st.session_state.kit_inventory[kit_name] = new_stock
+
+    st.markdown("")
+
+    # ── Pathogen Overview Cards ───────────────────────────────────────────────
+    st.markdown('<div class="section-header">Pathogen-Uebersicht</div>', unsafe_allow_html=True)
 
     overview_cols = st.columns(len(pathogens), gap="medium")
 
     for i, pathogen_name in enumerate(pathogens):
         with overview_cols[i]:
             try:
+                p_stock = get_stock_for_pathogen(pathogen_name)
                 ww = fetch_rki_wastewater(raw_df, pathogen=pathogen_name)
                 lab = generate_lab_volume(ww, lag_days=14, pathogen=pathogen_name)
-                _, p_kpis = build_forecast(lab, pathogen=pathogen_name, stock_on_hand=stock_on_hand)
+                _, p_kpis = build_forecast(lab, pathogen=pathogen_name, stock_on_hand=p_stock)
 
                 trend = p_kpis.get("trend_pct", 0)
                 if trend > 5:
@@ -497,13 +571,20 @@ with tab_overview:
 
                 status = p_kpis.get("reagent_status", "N/A")
                 pred_7d = p_kpis.get("predicted_tests_7d", 0)
+                risk = p_kpis.get("risk_eur", 0)
+
+                risk_html = ""
+                if risk > 0:
+                    risk_html = f'<div style="color: #ef4444; font-size: 0.7rem; margin-top: 0.2rem;">Risk: EUR {risk:,.0f}</div>'
 
                 st.markdown(
                     f'<div class="sparkline-card">'
                     f'<div class="sparkline-title">{pathogen_name}</div>'
                     f'<div class="sparkline-value">{pred_7d:,}</div>'
+                    f'<div style="color: var(--text-muted); font-size: 0.65rem;">Tests progn. (7d)</div>'
                     f'<div class="{trend_class}">{trend_icon} {trend:+.1f}% WoW</div>'
                     f'<div style="color: var(--text-muted); font-size: 0.7rem; margin-top: 0.3rem;">{status}</div>'
+                    f'{risk_html}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -625,6 +706,10 @@ with tab_detail:
     st.markdown(
         f'<div class="section-header">{selected_pathogen} — Abwasser vs. Laborvolumen</div>',
         unsafe_allow_html=True,
+    )
+    st.caption(
+        "Die Viruslast im Abwasser (blau) korreliert mit dem Testaufkommen im Labor (orange) "
+        "mit ca. 14 Tagen Verzoegerung. Pinch-to-Zoom oder Mausrad zum Reinzoomen."
     )
 
     today = pd.Timestamp(datetime.today()).normalize()
@@ -784,11 +869,127 @@ with tab_detail:
     fig.update_yaxes(title_text="Tests / Tag", secondary_y=True, gridcolor="rgba(255,255,255,0.04)", title_font=dict(color="#f77f00", size=11), tickfont=dict(size=9, color="#64748b"))
 
     st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-    st.plotly_chart(fig, use_container_width=True, key="correlation_chart")
+    st.plotly_chart(
+        fig, use_container_width=True, key="correlation_chart",
+        config={
+            "scrollZoom": True,
+            "displayModeBar": True,
+            "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+            "displaylogo": False,
+        },
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Store fig for PDF export
     correlation_fig_for_pdf = fig
+
+    # ── Section 2b: Surveillance-Signale (GrippeWeb + ARE) ────────────────────
+    st.markdown(
+        '<div class="section-header">Ergaenzende Surveillance-Signale</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Diese Datenquellen ergaenzen die Abwasserdaten: GrippeWeb erfasst Selbstmeldungen aus der Bevoelkerung, "
+        "ARE-Konsultationen messen die Arztbesuche. Steigende Werte hier → mehr Testaufkommen in 1-2 Wochen."
+    )
+
+    surv_col1, surv_col2 = st.columns(2, gap="medium")
+
+    with surv_col1:
+        st.caption("GrippeWeb — Bevoelkerungsbasierte ARE/ILI-Inzidenz (freiwillige Meldungen)")
+        gw_type = st.radio(
+            "Typ", ["ARE", "ILI"], horizontal=True, key="gw_type",
+            help="ARE = Akute Atemwegserkrankung, ILI = Influenza-like Illness",
+        )
+        with st.spinner("Lade GrippeWeb …"):
+            gw_df = fetch_grippeweb(erkrankung=gw_type, region="Bundesweit")
+
+        if not gw_df.empty:
+            gw_recent = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
+            fig_gw = go.Figure()
+            fig_gw.add_trace(
+                go.Scatter(
+                    x=gw_recent["date"], y=gw_recent["incidence"],
+                    name=f"GrippeWeb {gw_type}",
+                    fill="tozeroy",
+                    line=dict(color="#8b5cf6", width=2),
+                    fillcolor="rgba(139,92,246,0.08)",
+                    hovertemplate="%{x|%d %b %Y}: %{y:,.1f} / 100.000<extra></extra>",
+                )
+            )
+            fig_gw.add_shape(
+                type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
+                line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"),
+            )
+            fig_gw.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(17,24,39,0.5)",
+                height=250, margin=dict(l=0, r=0, t=5, b=0),
+                yaxis_title="Inzidenz / 100.000",
+                yaxis_title_font=dict(size=10, color="#64748b"),
+                showlegend=False, hovermode="x unified",
+            )
+            fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
+            fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
+
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            st.plotly_chart(fig_gw, use_container_width=True, key="gw_detail")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if len(gw_recent) >= 2:
+                latest_gw = gw_recent["incidence"].iloc[-1]
+                prev_gw = gw_recent["incidence"].iloc[-2]
+                chg_gw = ((latest_gw - prev_gw) / prev_gw * 100) if prev_gw > 0 else 0
+                st.caption(f"Aktuell: {latest_gw:,.1f} / 100.000 ({chg_gw:+.1f}% vs. Vorwoche)")
+        else:
+            st.caption("GrippeWeb nicht verfuegbar.")
+
+    with surv_col2:
+        st.caption("ARE-Konsultationsinzidenz — Praxen-Sentinel (Arztbesuche)")
+        with st.spinner("Lade ARE …"):
+            are_df = fetch_are_konsultation(bundesland="Bundesweit")
+
+        if not are_df.empty:
+            are_recent = are_df[are_df["date"] >= (today - pd.Timedelta(days=730))].copy()
+            fig_are = go.Figure()
+            fig_are.add_trace(
+                go.Scatter(
+                    x=are_recent["date"], y=are_recent["consultation_incidence"],
+                    name="ARE Konsultationen",
+                    fill="tozeroy",
+                    line=dict(color="#06b6d4", width=2),
+                    fillcolor="rgba(6,182,212,0.08)",
+                    hovertemplate="%{x|%d %b %Y}: %{y:,.0f} / 100.000<extra></extra>",
+                )
+            )
+            fig_are.add_shape(
+                type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
+                line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"),
+            )
+            fig_are.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(17,24,39,0.5)",
+                height=250, margin=dict(l=0, r=0, t=5, b=0),
+                yaxis_title="Konsultationen / 100.000",
+                yaxis_title_font=dict(size=10, color="#64748b"),
+                showlegend=False, hovermode="x unified",
+            )
+            fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
+            fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
+
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            st.plotly_chart(fig_are, use_container_width=True, key="are_detail")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if len(are_recent) >= 2:
+                latest_are = are_recent["consultation_incidence"].iloc[-1]
+                prev_are = are_recent["consultation_incidence"].iloc[-2]
+                chg_are = ((latest_are - prev_are) / prev_are * 100) if prev_are > 0 else 0
+                st.caption(f"Aktuell: {latest_are:,.0f} / 100.000 ({chg_are:+.1f}% vs. Vorwoche)")
+        else:
+            st.caption("ARE-Daten nicht verfuegbar.")
 
     # ── Section 3: Burndown + Table ──────────────────────────────────────────
     col_left, col_right = st.columns([1, 1], gap="medium")
@@ -797,6 +998,8 @@ with tab_detail:
 
     with col_left:
         st.markdown('<div class="section-header">Reagenz-Bestandsprognose</div>', unsafe_allow_html=True)
+        kit_name_current = get_kit_for_pathogen(selected_pathogen)
+        st.caption(f"Kit: {kit_name_current} · Aktueller Bestand: {stock_on_hand:,} · Bestand oben in der Uebersicht aendern.")
 
         remaining = kpis.get("remaining_stock", [])
         if remaining:
@@ -955,7 +1158,7 @@ with tab_regional:
                 col_map, col_table = st.columns([2, 1], gap="medium")
 
                 with col_map:
-                    fig_map = px.scatter_mapbox(
+                    fig_map = px.scatter_geo(
                         map_df,
                         lat="lat",
                         lon="lon",
@@ -971,14 +1174,31 @@ with tab_regional:
                             "lon": False,
                         },
                         size_max=40,
-                        zoom=5,
-                        center=GERMANY_CENTER,
-                        mapbox_style="carto-darkmatter",
+                        scope="europe",
+                        text="bundesland",
+                    )
+                    fig_map.update_geos(
+                        center=dict(lat=51.1657, lon=10.4515),
+                        projection_scale=8,
+                        showland=True,
+                        landcolor="#111827",
+                        showocean=True,
+                        oceancolor="#0b0e17",
+                        showcountries=True,
+                        countrycolor="rgba(255,255,255,0.1)",
+                        showlakes=False,
+                        bgcolor="rgba(0,0,0,0)",
+                    )
+                    fig_map.update_traces(
+                        textfont=dict(size=8, color="#94a3b8"),
+                        textposition="top center",
                     )
                     fig_map.update_layout(
-                        height=500,
+                        template="plotly_dark",
+                        height=550,
                         margin=dict(l=0, r=0, t=0, b=0),
                         paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
                         coloraxis_colorbar=dict(
                             title="Trend %",
                             tickfont=dict(color="#94a3b8"),
@@ -1010,161 +1230,97 @@ with tab_regional:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 4: EXTERNAL SIGNALS (GrippeWeb, ARE, Google Trends)
+# TAB 4: GOOGLE TRENDS
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_signals:
-    st.markdown('<div class="section-header">Externe Surveillance-Signale</div>', unsafe_allow_html=True)
-
-    sig_col1, sig_col2 = st.columns(2, gap="medium")
-
-    # ── GrippeWeb ─────────────────────────────────────────────────────────────
-    with sig_col1:
-        st.markdown(
-            '<div class="section-header">GrippeWeb — Bevoelkerungsinzidenz</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("Freiwillige Online-Meldungen akuter Atemwegserkrankungen (ARE/ILI)")
-
-        gw_type = st.radio(
-            "Erkrankungstyp",
-            ["ARE", "ILI"],
-            horizontal=True,
-            key="gw_type",
-            help="ARE = Akute Atemwegserkrankung, ILI = Influenza-like Illness",
-        )
-
-        with st.spinner("Lade GrippeWeb-Daten …"):
-            gw_df = fetch_grippeweb(erkrankung=gw_type, region="Bundesweit")
-
-        if not gw_df.empty:
-            # Last 2 years
-            gw_recent = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
-
-            fig_gw = go.Figure()
-            fig_gw.add_trace(
-                go.Scatter(
-                    x=gw_recent["date"], y=gw_recent["incidence"],
-                    name=f"GrippeWeb {gw_type}",
-                    fill="tozeroy",
-                    line=dict(color="#8b5cf6", width=2),
-                    fillcolor="rgba(139,92,246,0.08)",
-                    hovertemplate="%{x|%d %b %Y}: %{y:,.1f} / 100.000<extra></extra>",
-                )
-            )
-
-            # Add today marker
-            fig_gw.add_shape(
-                type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
-                line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"),
-            )
-
-            fig_gw.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(17,24,39,0.5)",
-                height=300, margin=dict(l=0, r=0, t=10, b=0),
-                yaxis_title="Inzidenz / 100.000",
-                yaxis_title_font=dict(size=10, color="#64748b"),
-                showlegend=False,
-                hovermode="x unified",
-            )
-            fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
-            fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
-
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            st.plotly_chart(fig_gw, use_container_width=True, key="grippeweb_chart")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            # Summary stats
-            if len(gw_recent) >= 2:
-                latest = gw_recent["incidence"].iloc[-1]
-                prev = gw_recent["incidence"].iloc[-2]
-                change = ((latest - prev) / prev * 100) if prev > 0 else 0
-                st.caption(
-                    f"Aktuelle KW: {latest:,.1f} / 100.000 "
-                    f"({change:+.1f}% vs. Vorwoche) · "
-                    f"{len(gw_recent)} Wochen Daten"
-                )
-        else:
-            st.info("GrippeWeb-Daten konnten nicht geladen werden.")
-
-    # ── ARE-Konsultationsinzidenz ─────────────────────────────────────────────
-    with sig_col2:
-        st.markdown(
-            '<div class="section-header">ARE-Konsultationsinzidenz</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("Praxen-Sentinel: Arztbesuche wegen akuter Atemwegserkrankungen")
-
-        with st.spinner("Lade ARE-Daten …"):
-            are_df = fetch_are_konsultation(bundesland="Bundesweit")
-
-        if not are_df.empty:
-            are_recent = are_df[are_df["date"] >= (today - pd.Timedelta(days=730))].copy()
-
-            fig_are = go.Figure()
-            fig_are.add_trace(
-                go.Scatter(
-                    x=are_recent["date"], y=are_recent["consultation_incidence"],
-                    name="ARE Konsultationen",
-                    fill="tozeroy",
-                    line=dict(color="#06b6d4", width=2),
-                    fillcolor="rgba(6,182,212,0.08)",
-                    hovertemplate="%{x|%d %b %Y}: %{y:,.0f} / 100.000<extra></extra>",
-                )
-            )
-
-            fig_are.add_shape(
-                type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
-                line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"),
-            )
-
-            fig_are.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(17,24,39,0.5)",
-                height=300, margin=dict(l=0, r=0, t=10, b=0),
-                yaxis_title="Konsultationen / 100.000",
-                yaxis_title_font=dict(size=10, color="#64748b"),
-                showlegend=False,
-                hovermode="x unified",
-            )
-            fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
-            fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
-
-            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            st.plotly_chart(fig_are, use_container_width=True, key="are_chart")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            if len(are_recent) >= 2:
-                latest = are_recent["consultation_incidence"].iloc[-1]
-                prev = are_recent["consultation_incidence"].iloc[-2]
-                change = ((latest - prev) / prev * 100) if prev > 0 else 0
-                st.caption(
-                    f"Aktuelle KW: {latest:,.0f} / 100.000 "
-                    f"({change:+.1f}% vs. Vorwoche) · "
-                    f"{len(are_recent)} Wochen Daten"
-                )
-        else:
-            st.info("ARE-Konsultationsdaten konnten nicht geladen werden.")
-
+with tab_trends:
     # ── Google Trends ─────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">Google Trends — Suchinteresse</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">Google Trends — Suchinteresse (echte Daten)</div>', unsafe_allow_html=True)
 
-    terms = PATHOGEN_SEARCH_TERMS.get(selected_pathogen, [])
-    if terms:
+    # Suggestions per pathogen
+    suggested_terms = PATHOGEN_SEARCH_TERMS.get(selected_pathogen, [])
+
+    # All available suggestions across all pathogens (for the pill buttons)
+    all_suggestions = sorted(set(
+        term for terms_list in PATHOGEN_SEARCH_TERMS.values() for term in terms_list
+    ))
+    # Add some extra general terms
+    extra_suggestions = [
+        "Fieber", "Husten", "Schnupfen", "Halsschmerzen", "Atemnot",
+        "Krankschreibung", "Arzt Termin", "Notaufnahme", "Apotheke",
+        "Impfung", "Maske", "PCR Test", "Antigentest",
+    ]
+    all_suggestions = sorted(set(all_suggestions + extra_suggestions))
+
+    # Session state for custom terms
+    if "trends_custom_terms" not in st.session_state:
+        st.session_state.trends_custom_terms = ", ".join(suggested_terms[:3])
+
+    trends_col_input, trends_col_time = st.columns([3, 1], gap="medium")
+
+    with trends_col_input:
+        custom_input = st.text_input(
+            "Suchbegriffe (kommagetrennt, max. 5)",
+            value=st.session_state.trends_custom_terms,
+            placeholder="z.B. Corona Test, Grippe Symptome, Fieber",
+            key="trends_input",
+            help="Eigene Suchbegriffe eingeben oder aus den Vorschlaegen waehlen.",
+        )
+        st.session_state.trends_custom_terms = custom_input
+
+    with trends_col_time:
+        trends_timeframe = st.selectbox(
+            "Zeitraum",
+            ["today 3-m", "today 12-m", "today 5-y"],
+            index=1,
+            format_func=lambda x: {"today 3-m": "3 Monate", "today 12-m": "12 Monate", "today 5-y": "5 Jahre"}[x],
+            key="trends_timeframe",
+        )
+
+    # Suggestion pills
+    st.markdown(
+        '<div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin:0.5rem 0 1rem 0;">',
+        unsafe_allow_html=True,
+    )
+
+    # Show pathogen-specific suggestions first, then general
+    display_suggestions = suggested_terms + [s for s in extra_suggestions if s not in suggested_terms]
+
+    pill_cols = st.columns(min(len(display_suggestions[:12]), 12))
+    for i, suggestion in enumerate(display_suggestions[:12]):
+        with pill_cols[i % len(pill_cols)]:
+            if st.button(
+                suggestion,
+                key=f"pill_{suggestion}",
+                use_container_width=True,
+                type="secondary",
+            ):
+                # Add to current terms
+                current = [t.strip() for t in st.session_state.trends_custom_terms.split(",") if t.strip()]
+                if suggestion not in current:
+                    current.append(suggestion)
+                    # Keep max 5
+                    current = current[-5:]
+                st.session_state.trends_custom_terms = ", ".join(current)
+                st.rerun()
+
+    # Parse user input into list
+    user_terms = [t.strip() for t in custom_input.split(",") if t.strip()][:5]
+
+    if user_terms:
         st.caption(
-            f"Suchbegriffe fuer {selected_pathogen}: " +
-            ", ".join(f'"{t}"' for t in terms)
+            f"Aktive Begriffe: " +
+            ", ".join(f'**{t}**' for t in user_terms) +
+            f" · Region: Deutschland · Werte: relativ (0-100)"
         )
 
         with st.spinner("Lade Google Trends …"):
-            trends_df = fetch_trends_for_pathogen(selected_pathogen, timeframe="today 12-m")
+            from modules.external_data import fetch_google_trends
+            trends_df = fetch_google_trends(user_terms, timeframe=trends_timeframe, geo="DE")
 
         if not trends_df.empty:
             fig_trends = go.Figure()
 
-            term_cols = [c for c in trends_df.columns if c not in ("date", "avg_interest")]
+            term_cols = [c for c in trends_df.columns if c != "date"]
             colors = ["#f77f00", "#3b82f6", "#22c55e", "#a855f7", "#ef4444"]
 
             for i, col in enumerate(term_cols):
@@ -1172,20 +1328,8 @@ with tab_signals:
                     go.Scatter(
                         x=trends_df["date"], y=trends_df[col],
                         name=col,
-                        line=dict(color=colors[i % len(colors)], width=1.5),
-                        opacity=0.6,
+                        line=dict(color=colors[i % len(colors)], width=2),
                         hovertemplate=f"{col}: " + "%{y}<extra></extra>",
-                    )
-                )
-
-            # Average line (bold)
-            if "avg_interest" in trends_df.columns:
-                fig_trends.add_trace(
-                    go.Scatter(
-                        x=trends_df["date"], y=trends_df["avg_interest"],
-                        name="Durchschnitt",
-                        line=dict(color="#f1f5f9", width=2.5),
-                        hovertemplate="Ø Interesse: %{y:.0f}<extra></extra>",
                     )
                 )
 
@@ -1193,7 +1337,7 @@ with tab_signals:
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(17,24,39,0.5)",
-                height=300, margin=dict(l=0, r=0, t=10, b=0),
+                height=350, margin=dict(l=0, r=0, t=10, b=0),
                 yaxis_title="Relatives Suchinteresse (0-100)",
                 yaxis_title_font=dict(size=10, color="#64748b"),
                 legend=dict(
@@ -1201,6 +1345,7 @@ with tab_signals:
                     font=dict(size=9, color="#94a3b8"), bgcolor="rgba(0,0,0,0)",
                 ),
                 hovermode="x unified",
+                hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12),
             )
             fig_trends.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
             fig_trends.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
@@ -1209,17 +1354,17 @@ with tab_signals:
             st.plotly_chart(fig_trends, use_container_width=True, key="trends_chart")
             st.markdown("</div>", unsafe_allow_html=True)
         else:
-            st.info(
-                "Google Trends nicht verfuegbar. "
-                "Moegliche Ursache: pytrends nicht installiert oder Rate-Limit erreicht."
+            st.warning(
+                "Google Trends hat keine Daten zurueckgegeben. "
+                "Moeglich: Rate-Limit erreicht (~10-15 Abfragen/Stunde) oder Begriffe zu nischig."
             )
 
         # Limitations expander
-        with st.expander("Google Trends — Einschraenkungen"):
+        with st.expander("Hinweis: Google Trends Einschraenkungen"):
             for lim in get_trends_limitations():
                 st.caption(f"• {lim}")
     else:
-        st.info(f"Keine Suchbegriffe fuer {selected_pathogen} definiert.")
+        st.info("Suchbegriffe eingeben um Google Trends zu laden.")
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────
