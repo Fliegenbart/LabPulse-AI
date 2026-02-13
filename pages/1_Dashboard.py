@@ -38,31 +38,69 @@ st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;400;600&family=Azeret+Mono:wght@400;600&display=swap');
 
 :root {
-    --bg: #2a2a3a;
-    --surface: #383850;
-    --border: rgba(212,149,106,0.18);
-    --text: #f0ece5;
-    --dim: #9e9890;
+    /* Abgestufte Slate-Palette — warm, nicht schwarz */
+    --slate-950: #1e1e2e;
+    --slate-900: #262638;
+    --slate-800: #2f2f45;
+    --slate-700: #3a3a54;
+    --slate-600: #484866;
+    --slate-500: #6b6b88;
+    --slate-400: #9090a8;
+    --slate-300: #b0b0c4;
+    --slate-200: #d0d0de;
+    --slate-100: #ebebf0;
+    --slate-50:  #f5f4f8;
+
+    --bg: var(--slate-950);
+    --surface: var(--slate-800);
+    --surface-glass: rgba(47,47,69,0.6);
+    --border: rgba(176,176,196,0.12);
+    --border-hover: rgba(212,149,106,0.25);
+    --text: var(--slate-100);
+    --dim: var(--slate-400);
     --accent: #d4956a;
-    --radius: 16px;
+    --accent-glow: rgba(212,149,106,0.15);
+    --radius: 14px;
     --font: 'Bricolage Grotesque', sans-serif;
     --mono: 'Azeret Mono', monospace;
 }
 
 /* 3 font sizes only */
 .zen-lg { font-size: 1.5rem; font-weight: 600; color: var(--text); font-family: var(--mono); letter-spacing: -0.02em; }
-.zen-body { font-size: 0.85rem; color: var(--text); font-family: var(--font); line-height: 1.7; }
+.zen-body { font-size: 0.85rem; color: var(--slate-200); font-family: var(--font); line-height: 1.7; }
 .zen-sm { font-size: 0.72rem; color: var(--dim); font-family: var(--font); }
 
-.stApp { background: var(--bg); }
-.stApp::before { display: none; }
+/* ── App background with subtle grain texture ── */
+.stApp {
+    background: var(--bg);
+    background-image:
+        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(212,149,106,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 60% at 80% 100%, rgba(107,107,136,0.05) 0%, transparent 50%);
+}
+.stApp::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+}
 
 .block-container {
+    position: relative; z-index: 1;
     padding: 3rem 3.75rem 1.5rem 3.75rem;
     max-width: 1280px;
     font-family: var(--font);
 }
 html, body, [class*="css"] { font-family: var(--font); }
+
+/* ── Glassmorphism mixin ── */
+.glass {
+    background: var(--surface-glass);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
 
 /* ── Header ── */
 .zen-header {
@@ -93,14 +131,22 @@ html, body, [class*="css"] { font-family: var(--font); }
 .zen-kpi .delta.warn { color: var(--accent); }
 .zen-kpi .delta.ok { color: #5eead4; }
 
-/* ── ML Toggle ── */
+/* ── ML Toggle — glassmorphism + accent glow ── */
 .zen-ml-row {
     display: flex; align-items: center; justify-content: space-between;
     padding: 1.4rem 1.8rem;
     margin-bottom: 2.5rem;
-    background: linear-gradient(135deg, var(--surface), rgba(212,149,106,0.04));
-    border: 1.5px solid rgba(212,149,106,0.15);
+    background: linear-gradient(135deg, var(--surface-glass), rgba(212,149,106,0.06));
+    backdrop-filter: blur(16px) saturate(1.3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    border: 1.5px solid rgba(212,149,106,0.18);
     border-radius: var(--radius);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.04);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.zen-ml-row:hover {
+    border-color: rgba(212,149,106,0.3);
+    box-shadow: 0 4px 32px rgba(212,149,106,0.08), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .zen-ml-row .label { font-size: 1.1rem; color: var(--text); font-weight: 600; }
 .zen-ml-row .sub { font-size: 0.78rem; color: var(--dim); margin-top: 0.2rem; }
@@ -119,26 +165,34 @@ html, body, [class*="css"] { font-family: var(--font); }
     margin-bottom: 2rem;
     border-radius: var(--radius);
     border-left: 3px solid #fb7185;
-    background: rgba(251,113,133,0.04);
+    background: rgba(251,113,133,0.06);
+    backdrop-filter: blur(12px);
     color: #fda4af;
     font-size: 0.85rem; line-height: 1.6;
 }
 
-/* ── Chart wrapper ── */
+/* ── Chart wrapper — glassmorphism ── */
 .zen-chart {
-    background: var(--surface);
+    background: var(--surface-glass);
+    backdrop-filter: blur(16px) saturate(1.3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.5rem;
     margin-bottom: 3rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
 }
 
-/* ── Cards (expander content) ── */
+/* ── Cards (expander content) — glassmorphism ── */
 div[data-testid="stExpander"] {
+    background: var(--surface-glass) !important;
+    backdrop-filter: blur(12px) !important;
     border: 1px solid var(--border) !important;
     border-radius: var(--radius) !important;
     margin-bottom: 1.5rem;
+    transition: border-color 0.2s ease;
 }
+div[data-testid="stExpander"]:hover { border-color: var(--border-hover) !important; }
 div[data-testid="stExpander"] summary {
     font-family: var(--font) !important;
     font-size: 0.85rem !important;
@@ -148,18 +202,27 @@ div[data-testid="stExpander"] summary {
 
 /* ── Metric cards ── */
 div[data-testid="stMetric"] {
-    background: var(--surface);
+    background: var(--surface-glass);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1rem 1.2rem;
+    transition: border-color 0.2s ease;
 }
+div[data-testid="stMetric"]:hover { border-color: var(--border-hover); }
 div[data-testid="stMetric"] label { color: var(--dim) !important; font-family: var(--font) !important; font-size: 0.72rem !important; }
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: var(--text) !important; font-family: var(--mono) !important; font-size: 1.2rem !important; }
 div[data-testid="stMetric"] div[data-testid="stMetricDelta"] { font-family: var(--mono) !important; font-size: 0.72rem !important; }
 
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] { gap: 0; border-bottom: 1px solid var(--border); margin-top: 1.5rem; }
-.stTabs [data-baseweb="tab"] { font-family: var(--font); font-size: 0.85rem; font-weight: 500; padding: 0.75rem 1.5rem; color: var(--dim); border-bottom: 2px solid transparent; }
+.stTabs [data-baseweb="tab"] {
+    font-family: var(--font); font-size: 0.85rem; font-weight: 500;
+    padding: 0.75rem 1.5rem; color: var(--dim);
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+.stTabs [data-baseweb="tab"]:hover { color: var(--slate-200); }
 .stTabs [aria-selected="true"] { color: var(--accent) !important; border-bottom-color: var(--accent) !important; }
 
 /* ── Data table ── */
@@ -169,12 +232,21 @@ div[data-testid="stMetric"] div[data-testid="stMetricDelta"] { font-family: var(
 .stButton > button {
     font-family: var(--font); font-weight: 600;
     border-radius: 8px; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text);
+    background: var(--surface-glass); color: var(--text);
+    backdrop-filter: blur(8px);
+    transition: all 0.25s ease;
 }
-.stButton > button:hover { border-color: var(--accent); }
+.stButton > button:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 16px rgba(212,149,106,0.1);
+    transform: translateY(-1px);
+}
 
 /* ── Sidebar ── */
-[data-testid="stSidebar"] { background: var(--bg); border-right: 1px solid var(--border); }
+[data-testid="stSidebar"] {
+    background: var(--slate-900) !important;
+    border-right: 1px solid var(--border);
+}
 [data-testid="stSidebar"] .stMarkdown h1 { color: var(--accent); font-family: var(--font); font-size: 1rem; font-weight: 600; }
 .sidebar-label { color: var(--dim); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 0.5rem; }
 .sidebar-pill { display: inline-block; background: rgba(212,149,106,0.1); color: var(--accent); font-family: var(--mono); font-size: 0.6rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 99px; margin-left: 0.4rem; }
@@ -185,7 +257,7 @@ div[data-testid="stMetric"] div[data-testid="stMetricDelta"] { font-family: var(
 
 /* ── Hide chrome ── */
 #MainMenu, footer { visibility: hidden; }
-header[data-testid="stHeader"] { background: transparent; }
+header[data-testid="stHeader"] { background: transparent !important; backdrop-filter: blur(16px); }
 </style>""", unsafe_allow_html=True)
 
 
@@ -446,10 +518,10 @@ if use_ml and ml_model_info:
     _xrange = [(today - pd.Timedelta(days=21)).strftime("%Y-%m-%d"), (today + pd.Timedelta(days=forecast_horizon + 3)).strftime("%Y-%m-%d")]
 
 fig.update_layout(
-    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)",
+    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(47,47,69,0.4)",
     height=520, margin=dict(l=0, r=0, t=40, b=10),
     legend=dict(orientation="h", y=1.08, x=0.5, xanchor="center", font=dict(size=10, color="#524e48", family="Bricolage Grotesque"), bgcolor="rgba(0,0,0,0)"),
-    hovermode="x unified", hoverlabel=dict(bgcolor="#383850", bordercolor="rgba(212,149,106,0.1)", font_size=12, font_family="Bricolage Grotesque"),
+    hovermode="x unified", hoverlabel=dict(bgcolor="#2f2f45", bordercolor="rgba(212,149,106,0.1)", font_size=12, font_family="Bricolage Grotesque"),
     **({"xaxis_range": _xrange} if _xrange else {}),
 )
 fig.update_xaxes(
@@ -557,7 +629,7 @@ with tab_forecast:
                 so_str = pd.Timestamp(stockout_day).strftime("%Y-%m-%d")
                 fig_burn.add_shape(type="line", x0=so_str, x1=so_str, y0=0, y1=1, yref="paper", line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dash"))
 
-            fig_burn.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=300, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
+            fig_burn.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(47,47,69,0.4)", height=300, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
             fig_burn.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             fig_burn.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             st.plotly_chart(fig_burn, use_container_width=True, key="burndown")
@@ -597,7 +669,7 @@ with tab_data:
             gw_r = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
             fig_gw = go.Figure()
             fig_gw.add_trace(go.Scatter(x=gw_r["date"], y=gw_r["incidence"], fill="tozeroy", line=dict(color="#a78bfa", width=2), fillcolor="rgba(167,139,250,0.05)", hovertemplate="%{x|%d %b}: %{y:,.1f}<extra></extra>"))
-            fig_gw.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
+            fig_gw.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(47,47,69,0.4)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
             fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             st.plotly_chart(fig_gw, use_container_width=True, key="gw")
@@ -612,7 +684,7 @@ with tab_data:
             ar = are_df[are_df["date"] >= (today - pd.Timedelta(days=730))].copy()
             fig_are = go.Figure()
             fig_are.add_trace(go.Scatter(x=ar["date"], y=ar["consultation_incidence"], fill="tozeroy", line=dict(color="#5eead4", width=2), fillcolor="rgba(94,234,212,0.05)", hovertemplate="%{x|%d %b}: %{y:,.0f}<extra></extra>"))
-            fig_are.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
+            fig_are.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(47,47,69,0.4)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
             fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             st.plotly_chart(fig_are, use_container_width=True, key="are")
@@ -642,7 +714,7 @@ with tab_data:
                 colors = ["#d4956a", "#5eead4", "#a78bfa", "#a3e635", "#fb7185"]
                 for i, col in enumerate([c for c in trends_df.columns if c != "date"]):
                     fig_t.add_trace(go.Scatter(x=trends_df["date"], y=trends_df[col], name=col, line=dict(color=colors[i % 5], width=2)))
-                fig_t.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=280, margin=dict(l=0, r=0, t=5, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
+                fig_t.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(47,47,69,0.4)", height=280, margin=dict(l=0, r=0, t=5, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
                 fig_t.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
                 fig_t.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
                 st.plotly_chart(fig_t, use_container_width=True, key="trends")
@@ -677,7 +749,7 @@ with tab_regional:
                         hovertemplate="<b>%{text}</b><br>Ø %{customdata[0]:,.0f}<br>Trend %{customdata[1]:+.1f}%<extra></extra>",
                         customdata=map_df[["avg_virus_load", "trend_pct"]].values,
                     ))
-                    fig_m.update_layout(template="plotly_dark", height=480, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)",
+                    fig_m.update_layout(template="plotly_dark", height=480, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(47,47,69,0.4)",
                         xaxis=dict(range=[5.5, 15.5], showgrid=True, gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48")),
                         yaxis=dict(range=[47, 55.5], showgrid=True, gridcolor="rgba(255,255,255,0.02)", scaleanchor="x", scaleratio=1.5, tickfont=dict(size=9, color="#524e48")),
                         showlegend=False)

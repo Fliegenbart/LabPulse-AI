@@ -19,24 +19,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Darker+Grotesque:wght@300;400;500;600;700;900&family=Azeret+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg-void: #2a2a3a;
-    --bg-deep: #303044;
-    --bg-surface: #383850;
-    --bg-card: #42425c;
+    --bg-void: #1e1e2e;
+    --bg-deep: #252538;
+    --bg-surface: #2f2f45;
+    --bg-card: #3a3a54;
     --accent: #d4956a;
     --accent-bright: #e8b08a;
-    --accent-dim: rgba(212,149,106,0.12);
-    --accent-glow: rgba(212,149,106,0.22);
+    --accent-dim: rgba(212,149,106,0.10);
+    --accent-glow: rgba(212,149,106,0.18);
     --signal-teal: #5eead4;
     --signal-violet: #a78bfa;
     --signal-rose: #fb7185;
     --signal-lime: #a3e635;
-    --text-bright: #f5f0eb;
-    --text-primary: #f0ece5;
-    --text-secondary: #9e9890;
-    --text-muted: #7a756c;
-    --border: rgba(212,149,106,0.18);
-    --border-hover: rgba(212,149,106,0.28);
+    --text-bright: #f5f4f8;
+    --text-primary: #ebebf0;
+    --text-secondary: #9090a8;
+    --text-muted: #6b6b88;
+    --border: rgba(176,176,196,0.12);
+    --border-hover: rgba(212,149,106,0.25);
     --font-display: 'Darker Grotesque', sans-serif;
     --font-body: 'Bricolage Grotesque', sans-serif;
     --font-mono: 'Azeret Mono', monospace;
@@ -225,10 +225,13 @@ st.markdown("""
     gap:1rem;
 }
 .lp-card {
-    background:linear-gradient(165deg, var(--bg-card), rgba(11,11,20,0.6));
+    background:linear-gradient(165deg, rgba(58,58,84,0.5), rgba(47,47,69,0.3));
+    backdrop-filter:blur(16px) saturate(1.3);
+    -webkit-backdrop-filter:blur(16px) saturate(1.3);
     border:1px solid var(--border); border-radius:14px;
     padding:2.2rem; position:relative; overflow:hidden;
     transition:all 0.4s cubic-bezier(0.4,0,0.2,1);
+    box-shadow:0 4px 24px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.03);
 }
 .lp-card::after {
     content:''; position:absolute; top:0; left:0; right:0; height:1px;
@@ -290,7 +293,8 @@ st.markdown("""
 }
 .lp-pill {
     display:flex; align-items:center; gap:0.6rem;
-    background:var(--bg-surface); border:1px solid var(--border);
+    background:rgba(47,47,69,0.4); backdrop-filter:blur(12px);
+    border:1px solid var(--border);
     border-radius:99px; padding:0.6rem 1.3rem;
     transition:all 0.25s ease;
 }
