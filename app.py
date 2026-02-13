@@ -1268,9 +1268,8 @@ with tab_regional:
                                 color=map_df["trend_pct"],
                                 colorscale=[[0, "#22c55e"], [0.5, "#f77f00"], [1, "#ef4444"]],
                                 colorbar=dict(
-                                    title="Trend %",
+                                    title=dict(text="Trend %", font=dict(color="#94a3b8")),
                                     tickfont=dict(color="#94a3b8"),
-                                    titlefont=dict(color="#94a3b8"),
                                 ),
                                 opacity=0.85,
                                 line=dict(width=1, color="rgba(255,255,255,0.15)"),
