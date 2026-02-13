@@ -46,7 +46,7 @@ def _safe_import_reportlab():
     }
 
 
-# ── Ganzimmun Brand Colors ───────────────────────────────────────────────────
+# ── Brand Colors ─────────────────────────────────────────────────────────────
 ORANGE = (0.969, 0.498, 0.0)       # #f77f00
 DARK_BG = (0.043, 0.055, 0.090)    # #0b0e17
 CARD_BG = (0.067, 0.094, 0.153)    # #111827
@@ -155,7 +155,6 @@ def generate_report(
     elements.append(Paragraph("LabPulse AI — Report", title_style))
     elements.append(
         Paragraph(
-            f"Ganzimmun Diagnostics · Limbach Group &nbsp;|&nbsp; "
             f"{pathogen} &nbsp;|&nbsp; {now.strftime('%d.%m.%Y %H:%M')}",
             subtitle_style,
         )
@@ -303,7 +302,7 @@ def generate_report(
     elements.append(Spacer_(1, 1 * cm_))
     elements.append(
         Paragraph(
-            f"LabPulse AI · Ganzimmun Diagnostics · Limbach Group &nbsp;|&nbsp; "
+            f"LabPulse AI &nbsp;|&nbsp; "
             f"Datenquelle: RKI AMELAG &nbsp;|&nbsp; "
             f"Generiert: {now.strftime('%d.%m.%Y %H:%M')}",
             small_style,

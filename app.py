@@ -455,7 +455,7 @@ st.markdown("""
 </section>
 
 <footer class="lp-foot">
-    <span>LabPulse AI v2.0 &middot; Ganzimmun Diagnostics (Limbach Group)</span>
+    <span>LabPulse AI v2.0</span>
     <span>Daten: <a href="https://github.com/robert-koch-institut/Abwassersurveillance_AMELAG" target="_blank">RKI AMELAG</a></span>
 </footer>
 

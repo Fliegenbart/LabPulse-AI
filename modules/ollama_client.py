@@ -83,7 +83,7 @@ class OllamaClient:
         dashboard state. Falls back to rule-based text if Ollama is down.
         """
         system_prompt = (
-            "Du bist ein erfahrener Labordiagnostik-Analyst bei Ganzimmun Diagnostics. "
+            "Du bist ein erfahrener Labordiagnostik-Analyst. "
             "Deine Aufgabe: KPI-Daten in 3-5 klare, handlungsorientierte Saetze auf Deutsch zusammenfassen. "
             "Kein Markdown, keine Aufzaehlungen. Schreibe Fliesstext. "
             "Fokussiere auf: Trend, Risiko, empfohlene Massnahmen."

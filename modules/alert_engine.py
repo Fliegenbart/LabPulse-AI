@@ -23,7 +23,7 @@ SMTP_SERVER = os.getenv("SMTP_SERVER", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
-SMTP_FROM = os.getenv("SMTP_FROM", "labpulse@ganzimmun.de")
+SMTP_FROM = os.getenv("SMTP_FROM", "alerts@labpulse.ai")
 WEBHOOK_TIMEOUT = 10
 
 
@@ -190,7 +190,7 @@ class AlertManager:
                 f"LabPulse AI Alert — {pathogen}\n"
                 f"{datetime.now().strftime('%d.%m.%Y %H:%M')}\n\n"
                 + "\n".join(f"- {a}" for a in alerts)
-                + "\n\n---\nLabPulse AI · Ganzimmun Diagnostics"
+                + "\n\n---\nLabPulse AI"
             )
 
             body_html = (
@@ -199,7 +199,7 @@ class AlertManager:
                 f"<ul>"
                 + "".join(f"<li style='color:#fca5a5;'>{a}</li>" for a in alerts)
                 + "</ul>"
-                f"<hr><p style='color:#64748b;font-size:12px;'>LabPulse AI · Ganzimmun Diagnostics</p>"
+                f"<hr><p style='color:#64748b;font-size:12px;'>LabPulse AI</p>"
             )
 
             msg.attach(MIMEText(body_text, "plain"))
