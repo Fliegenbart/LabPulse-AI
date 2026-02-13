@@ -38,11 +38,11 @@ st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;400;600&family=Azeret+Mono:wght@400;600&display=swap');
 
 :root {
-    --bg: #212131;
-    --surface: #2c2c40;
-    --border: rgba(212,149,106,0.14);
-    --text: #e8e3db;
-    --dim: #908a80;
+    --bg: #2a2a3a;
+    --surface: #383850;
+    --border: rgba(212,149,106,0.18);
+    --text: #f0ece5;
+    --dim: #9e9890;
     --accent: #d4956a;
     --radius: 16px;
     --font: 'Bricolage Grotesque', sans-serif;
@@ -446,10 +446,10 @@ if use_ml and ml_model_info:
     _xrange = [(today - pd.Timedelta(days=21)).strftime("%Y-%m-%d"), (today + pd.Timedelta(days=forecast_horizon + 3)).strftime("%Y-%m-%d")]
 
 fig.update_layout(
-    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(44,44,64,0.5)",
+    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)",
     height=520, margin=dict(l=0, r=0, t=40, b=10),
     legend=dict(orientation="h", y=1.08, x=0.5, xanchor="center", font=dict(size=10, color="#524e48", family="Bricolage Grotesque"), bgcolor="rgba(0,0,0,0)"),
-    hovermode="x unified", hoverlabel=dict(bgcolor="#2c2c40", bordercolor="rgba(212,149,106,0.1)", font_size=12, font_family="Bricolage Grotesque"),
+    hovermode="x unified", hoverlabel=dict(bgcolor="#383850", bordercolor="rgba(212,149,106,0.1)", font_size=12, font_family="Bricolage Grotesque"),
     **({"xaxis_range": _xrange} if _xrange else {}),
 )
 fig.update_xaxes(
@@ -557,7 +557,7 @@ with tab_forecast:
                 so_str = pd.Timestamp(stockout_day).strftime("%Y-%m-%d")
                 fig_burn.add_shape(type="line", x0=so_str, x1=so_str, y0=0, y1=1, yref="paper", line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dash"))
 
-            fig_burn.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(44,44,64,0.5)", height=300, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
+            fig_burn.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=300, margin=dict(l=0, r=0, t=10, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
             fig_burn.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             fig_burn.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             st.plotly_chart(fig_burn, use_container_width=True, key="burndown")
@@ -597,7 +597,7 @@ with tab_data:
             gw_r = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
             fig_gw = go.Figure()
             fig_gw.add_trace(go.Scatter(x=gw_r["date"], y=gw_r["incidence"], fill="tozeroy", line=dict(color="#a78bfa", width=2), fillcolor="rgba(167,139,250,0.05)", hovertemplate="%{x|%d %b}: %{y:,.1f}<extra></extra>"))
-            fig_gw.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(44,44,64,0.5)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
+            fig_gw.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
             fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             st.plotly_chart(fig_gw, use_container_width=True, key="gw")
@@ -612,7 +612,7 @@ with tab_data:
             ar = are_df[are_df["date"] >= (today - pd.Timedelta(days=730))].copy()
             fig_are = go.Figure()
             fig_are.add_trace(go.Scatter(x=ar["date"], y=ar["consultation_incidence"], fill="tozeroy", line=dict(color="#5eead4", width=2), fillcolor="rgba(94,234,212,0.05)", hovertemplate="%{x|%d %b}: %{y:,.0f}<extra></extra>"))
-            fig_are.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(44,44,64,0.5)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
+            fig_are.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
             fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
             st.plotly_chart(fig_are, use_container_width=True, key="are")
@@ -642,7 +642,7 @@ with tab_data:
                 colors = ["#d4956a", "#5eead4", "#a78bfa", "#a3e635", "#fb7185"]
                 for i, col in enumerate([c for c in trends_df.columns if c != "date"]):
                     fig_t.add_trace(go.Scatter(x=trends_df["date"], y=trends_df[col], name=col, line=dict(color=colors[i % 5], width=2)))
-                fig_t.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(44,44,64,0.5)", height=280, margin=dict(l=0, r=0, t=5, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
+                fig_t.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)", height=280, margin=dict(l=0, r=0, t=5, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#524e48"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
                 fig_t.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
                 fig_t.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48"))
                 st.plotly_chart(fig_t, use_container_width=True, key="trends")
@@ -677,7 +677,7 @@ with tab_regional:
                         hovertemplate="<b>%{text}</b><br>Ø %{customdata[0]:,.0f}<br>Trend %{customdata[1]:+.1f}%<extra></extra>",
                         customdata=map_df[["avg_virus_load", "trend_pct"]].values,
                     ))
-                    fig_m.update_layout(template="plotly_dark", height=480, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(44,44,64,0.5)",
+                    fig_m.update_layout(template="plotly_dark", height=480, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(56,56,80,0.5)",
                         xaxis=dict(range=[5.5, 15.5], showgrid=True, gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#524e48")),
                         yaxis=dict(range=[47, 55.5], showgrid=True, gridcolor="rgba(255,255,255,0.02)", scaleanchor="x", scaleratio=1.5, tickfont=dict(size=9, color="#524e48")),
                         showlegend=False)

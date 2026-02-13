@@ -19,24 +19,24 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Darker+Grotesque:wght@300;400;500;600;700;900&family=Azeret+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg-void: #212131;
-    --bg-deep: #272738;
-    --bg-surface: #2c2c40;
-    --bg-card: #34344c;
+    --bg-void: #2a2a3a;
+    --bg-deep: #303044;
+    --bg-surface: #383850;
+    --bg-card: #42425c;
     --accent: #d4956a;
     --accent-bright: #e8b08a;
-    --accent-dim: rgba(212,149,106,0.10);
-    --accent-glow: rgba(212,149,106,0.18);
+    --accent-dim: rgba(212,149,106,0.12);
+    --accent-glow: rgba(212,149,106,0.22);
     --signal-teal: #5eead4;
     --signal-violet: #a78bfa;
     --signal-rose: #fb7185;
     --signal-lime: #a3e635;
     --text-bright: #f5f0eb;
-    --text-primary: #e8e3db;
-    --text-secondary: #908a80;
-    --text-muted: #6b665e;
-    --border: rgba(212,149,106,0.14);
-    --border-hover: rgba(212,149,106,0.18);
+    --text-primary: #f0ece5;
+    --text-secondary: #9e9890;
+    --text-muted: #7a756c;
+    --border: rgba(212,149,106,0.18);
+    --border-hover: rgba(212,149,106,0.28);
     --font-display: 'Darker Grotesque', sans-serif;
     --font-body: 'Bricolage Grotesque', sans-serif;
     --font-mono: 'Azeret Mono', monospace;
