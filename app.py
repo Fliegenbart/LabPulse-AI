@@ -662,13 +662,45 @@ fig.add_trace(
     secondary_y=True,
 )
 
-# ML Forecast overlay
+# ML Forecast overlay (enhanced visibility)
 if use_ml and ml_model_info and "ml_forecast" in dir():
     try:
         ml_fc = ml_forecast
-        fig.add_trace(go.Scatter(x=ml_fc["date"], y=ml_fc["upper"], name="ML Upper", showlegend=False, line=dict(width=0), mode="lines"), secondary_y=True)
-        fig.add_trace(go.Scatter(x=ml_fc["date"], y=ml_fc["lower"], name="ML-Konfidenzband", fill="tonexty", fillcolor="rgba(168,85,247,0.1)", line=dict(width=0), mode="lines"), secondary_y=True)
-        fig.add_trace(go.Scatter(x=ml_fc["date"], y=ml_fc["predicted"], name="ML-Prognose", line=dict(color="#a855f7", width=2.5, dash="dash"), hovertemplate="%{x|%d %b}: %{y:,.0f} ML<extra></extra>"), secondary_y=True)
+        # Confidence band (wider, more visible)
+        fig.add_trace(go.Scatter(
+            x=ml_fc["date"], y=ml_fc["upper"], name="ML Upper", showlegend=False,
+            line=dict(width=0), mode="lines",
+        ), secondary_y=True)
+        fig.add_trace(go.Scatter(
+            x=ml_fc["date"], y=ml_fc["lower"], name="ML-Konfidenzband",
+            fill="tonexty", fillcolor="rgba(168,85,247,0.18)",
+            line=dict(width=0.8, color="rgba(168,85,247,0.3)", dash="dot"), mode="lines",
+            hovertemplate="Konfidenzband: %{y:,.0f}<extra></extra>",
+        ), secondary_y=True)
+        # Main ML line (thicker, with markers at key points)
+        fig.add_trace(go.Scatter(
+            x=ml_fc["date"], y=ml_fc["predicted"], name="ML-Prognose",
+            line=dict(color="#a855f7", width=3, dash="dash"),
+            mode="lines+markers",
+            marker=dict(size=4, color="#a855f7", symbol="diamond",
+                        line=dict(width=1, color="white")),
+            hovertemplate=(
+                "<b>ML-Prognose</b><br>"
+                "%{x|%d %b %Y}<br>"
+                "Progn. Tests: <b>%{y:,.0f}</b><br>"
+                f"Modell: {ml_model_info.get('model_type', 'N/A')} "
+                f"({ml_model_info.get('confidence_score', 0):.0f}% Konfidenz)"
+                "<extra></extra>"
+            ),
+        ), secondary_y=True)
+        # Start marker for ML forecast
+        fig.add_trace(go.Scatter(
+            x=[ml_fc["date"].iloc[0]], y=[ml_fc["predicted"].iloc[0]],
+            mode="markers", name="ML Start", showlegend=False,
+            marker=dict(size=10, color="#a855f7", symbol="star",
+                        line=dict(width=2, color="white")),
+            hovertemplate="<b>ML-Prognose Start</b><br>%{x|%d %b %Y}<extra></extra>",
+        ), secondary_y=True)
     except Exception:
         pass
 
@@ -683,6 +715,21 @@ if not lab_forecast_chart.empty:
     label = f"Prognose (+{scenario_uplift}%)" if scenario_uplift > 0 else "Prognose"
     fig.add_trace(go.Scatter(x=fc_plot["date"], y=fc_plot[vol_col], name=label, line=dict(color="#f77f00", width=2.5, dash="dot"), hovertemplate="%{x|%d %b}: %{y:,.0f} prognostiziert<extra></extra>"), secondary_y=True)
 
+# Forecast shading zone (light purple background behind forecast area)
+_fc_end = today + pd.Timedelta(days=forecast_horizon)
+fig.add_vrect(
+    x0=today_str, x1=_fc_end.strftime("%Y-%m-%d"),
+    fillcolor="rgba(168,85,247,0.04)", layer="below", line_width=0,
+)
+fig.add_annotation(
+    x=_fc_end.strftime("%Y-%m-%d"), y=0.97, yref="paper",
+    text=f"Prognose-Fenster ({forecast_horizon}d) →",
+    showarrow=False, font=dict(size=9, color="#a855f7", family="Inter"),
+    bgcolor="rgba(168,85,247,0.12)", borderpad=4,
+    bordercolor="rgba(168,85,247,0.25)", borderwidth=1,
+    xanchor="right",
+)
+
 # TODAY marker
 fig.add_shape(type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper", line=dict(color="rgba(239,68,68,0.5)", width=1.5, dash="dot"))
 fig.add_annotation(x=today_str, y=1.06, yref="paper", text="HEUTE", showarrow=False, font=dict(size=9, color="#ef4444", family="Inter"), bgcolor="rgba(239,68,68,0.1)", borderpad=3, bordercolor="rgba(239,68,68,0.2)", borderwidth=1)
@@ -690,18 +737,56 @@ fig.add_annotation(x=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), y=0.93
 
 fig.update_layout(
     template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(17,24,39,0.5)",
-    height=420, margin=dict(l=0, r=0, t=35, b=0),
+    height=480, margin=dict(l=0, r=0, t=50, b=10),
     legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(size=10, color="#94a3b8", family="Inter"), bgcolor="rgba(0,0,0,0)"),
     hovermode="x unified", hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12, font_family="Inter"),
 )
-fig.update_xaxes(gridcolor="rgba(255,255,255,0.03)", dtick="M1", tickformat="%b '%y", tickfont=dict(size=10, color="#64748b"))
+fig.update_xaxes(
+    gridcolor="rgba(255,255,255,0.03)", dtick="M1", tickformat="%b '%y",
+    tickfont=dict(size=10, color="#64748b"),
+    rangeslider=dict(visible=True, thickness=0.04, bgcolor="rgba(30,41,59,0.5)",
+                     bordercolor="rgba(255,255,255,0.08)", borderwidth=1),
+    rangeselector=dict(
+        buttons=[
+            dict(count=1, label="1M", step="month", stepmode="backward"),
+            dict(count=3, label="3M", step="month", stepmode="backward"),
+            dict(count=forecast_horizon, label="Prognose", step="day", stepmode="todate"),
+            dict(step="all", label="Alles"),
+        ],
+        bgcolor="rgba(30,41,59,0.9)", activecolor="#a855f7",
+        bordercolor="rgba(255,255,255,0.1)", borderwidth=1,
+        font=dict(size=10, color="#e2e8f0", family="Inter"),
+        x=0, y=1.18,
+    ),
+)
 fig.update_yaxes(title_text="Viruslast", secondary_y=False, showgrid=False, title_font=dict(color="#3b82f6", size=11), tickfont=dict(size=9, color="#64748b"))
 fig.update_yaxes(title_text="Tests / Tag", secondary_y=True, gridcolor="rgba(255,255,255,0.04)", title_font=dict(color="#f77f00", size=11), tickfont=dict(size=9, color="#64748b"))
 
 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-st.plotly_chart(fig, use_container_width=True, key="correlation_chart", config={"scrollZoom": True, "displayModeBar": True, "modeBarButtonsToRemove": ["lasso2d", "select2d"], "displaylogo": False})
+st.plotly_chart(fig, use_container_width=True, key="correlation_chart", config={
+    "scrollZoom": True, "displayModeBar": True,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+    "displaylogo": False,
+    "toImageButtonOptions": dict(format="png", filename="labpulse_prognose", scale=2),
+})
 st.markdown("</div>", unsafe_allow_html=True)
 correlation_fig_for_pdf = fig
+
+# Explanatory legend below chart
+_legend_items = [
+    ("🔵", "Viruslast (Abwasser, RKI AMELAG)", "Linke Y-Achse · 7-Tage-Durchschnitt"),
+    ("🟠", "Labortests / Tag", "Rechte Y-Achse · Bestellvolumen (historisch)"),
+]
+if use_ml and ml_model_info:
+    _legend_items.append(("🟣", f"ML-Prognose ({ml_model_info.get('model_type', 'N/A')})",
+                          f"{ml_model_info.get('confidence_score', 0):.0f}% Konfidenz · Lila Konfidenzband = Unsicherheit"))
+_legend_items.append(("🟠 ···", "Standard-Prognose", f"{forecast_horizon}-Tage Forecast · Gepunktet"))
+_legend_html = " &nbsp;|&nbsp; ".join(
+    f"<span style='color:#94a3b8;font-size:0.78rem;'>{icon} <b>{label}</b> — {desc}</span>"
+    for icon, label, desc in _legend_items
+)
+st.markdown(f"<div style='padding:6px 12px;background:rgba(15,23,42,0.5);border-radius:8px;margin-top:-8px;'>{_legend_html}</div>", unsafe_allow_html=True)
+st.caption("💡 Nutze die Buttons **1M / 3M / Prognose / Alles** oder den Schieberegler unten im Chart zum Zoomen. Mausrad = Scroll-Zoom.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
