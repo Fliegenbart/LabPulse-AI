@@ -431,6 +431,71 @@ st.markdown(
         box-shadow: 0 4px 12px rgba(212,149,106,0.1);
     }
 
+    /* ── Pathogen Selector Cards ── */
+    .pathogen-row {
+        display: flex; gap: 0.6rem; flex-wrap: wrap;
+        margin: 1rem 0 0.5rem 0;
+    }
+    .pathogen-chip {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        border-radius: 99px;
+        font-family: var(--font-body);
+        font-size: 0.78rem; font-weight: 600;
+        color: var(--text-secondary);
+        background: var(--bg-card);
+        border: 1.5px solid var(--border);
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+    .pathogen-chip:hover {
+        border-color: var(--border-hover);
+        color: var(--text-bright);
+        transform: translateY(-1px);
+    }
+    .pathogen-chip.active {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 1px var(--accent), 0 4px 16px rgba(212,149,106,0.15);
+        color: var(--accent);
+        background: linear-gradient(135deg, rgba(212,149,106,0.08), var(--bg-card));
+    }
+
+    /* ── ML Toggle Bar ── */
+    .ml-toggle-bar {
+        display: flex;
+        align-items: center;
+        gap: 1.2rem;
+        background: linear-gradient(135deg, var(--bg-card), rgba(22,22,42,0.6));
+        border: 1px solid var(--border-hover);
+        border-radius: var(--radius);
+        padding: 1rem 1.5rem;
+        margin: 1.5rem 0 1rem 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .ml-toggle-bar::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--signal-violet), var(--accent), transparent);
+    }
+    .ml-toggle-bar .ml-icon {
+        width: 42px; height: 42px;
+        background: linear-gradient(135deg, var(--signal-violet), rgba(167,139,250,0.3));
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem; flex-shrink: 0;
+    }
+    .ml-toggle-bar .ml-text h4 {
+        margin: 0; font-family: var(--font-display); font-size: 1rem;
+        font-weight: 700; color: var(--text-bright); letter-spacing: 0.02em;
+    }
+    .ml-toggle-bar .ml-text p {
+        margin: 0.15rem 0 0 0; font-size: 0.75rem; color: var(--text-secondary);
+        font-family: var(--font-body);
+    }
+
     /* ── Hide Chrome ── */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -448,6 +513,8 @@ def load_raw():
 
 
 # ── Session State Defaults ───────────────────────────────────────────────────
+if "ml_enabled" not in st.session_state:
+    st.session_state.ml_enabled = False
 if "uploaded_lab_data" not in st.session_state:
     st.session_state.uploaded_lab_data = None
 if "alert_webhook_url" not in st.session_state:
@@ -492,12 +559,22 @@ with st.sidebar:
 
     raw_df = load_raw()
     pathogens = get_available_pathogens(raw_df)
+
+    # Determine default index from session state (synced with hero buttons)
+    _default_idx = 0
+    if "pathogen_selection" in st.session_state:
+        _sel = st.session_state["pathogen_selection"]
+        if _sel in pathogens:
+            _default_idx = pathogens.index(_sel)
+
     selected_pathogen = st.selectbox(
         "Pathogen waehlen",
         pathogens,
-        index=0,
+        index=_default_idx,
         label_visibility="collapsed",
     )
+    # Keep session state in sync
+    st.session_state["pathogen_selection"] = selected_pathogen
 
     reagent_info = PATHOGEN_REAGENT_MAP.get(selected_pathogen, {})
     if reagent_info:
@@ -514,7 +591,7 @@ with st.sidebar:
     safety_buffer = st.slider(
         "Sicherheitspuffer (%)", min_value=0, max_value=30, value=10, step=5
     )
-    use_ml = st.toggle("ML-Prognose (Prophet)", value=False, help="Prophet Time-Series statt einfacher 14-Tage-Verschiebung")
+    # ML toggle moved to main area (prominent)
 
     st.markdown("")
     st.markdown('<div class="sidebar-label">Simulation</div>', unsafe_allow_html=True)
@@ -558,6 +635,9 @@ with st.sidebar:
     st.markdown("")
     st.caption(f"Letzter Sync: {datetime.now().strftime('%H:%M')} · RKI AMELAG")
 
+
+# ── ML Toggle state (used before UI renders the toggle) ─────────────────────
+use_ml = st.session_state.ml_enabled
 
 # ── Load Pathogen-Specific Data ──────────────────────────────────────────────
 stock_on_hand = get_stock_for_pathogen(selected_pathogen)
@@ -612,6 +692,32 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+# ── Pathogen Visual Selector ─────────────────────────────────────────────────
+_pathogen_icons = {"SARS-CoV-2": "🦠", "Influenza A": "🫁", "Influenza B": "🫁",
+                   "Influenza (gesamt)": "🫁", "RSV": "🧫"}
+_pathogen_chips_html = '<div class="pathogen-row">'
+for p in pathogens:
+    _icon = _pathogen_icons.get(p, "🔬")
+    _active = "active" if p == selected_pathogen else ""
+    _pathogen_chips_html += f'<span class="pathogen-chip {_active}">{_icon} {p}</span>'
+_pathogen_chips_html += '</div>'
+st.markdown(_pathogen_chips_html, unsafe_allow_html=True)
+
+# Clickable Streamlit buttons below (functional — chips above are visual only)
+_path_cols = st.columns(len(pathogens), gap="small")
+for i, p in enumerate(pathogens):
+    with _path_cols[i]:
+        if p != selected_pathogen:
+            if st.button(f"→ {p}", key=f"pathsel_{p}", use_container_width=True):
+                st.session_state["pathogen_selection"] = p
+                st.rerun()
+
+# Sync session state back to selectbox
+if "pathogen_selection" in st.session_state and st.session_state["pathogen_selection"] != selected_pathogen:
+    # Will be picked up on next rerun — selectbox reads from session
+    pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -738,6 +844,32 @@ with signal_col:
         )
     signal_html += '</div>'
     st.markdown(signal_html, unsafe_allow_html=True)
+
+
+# ── ML-Prognose Toggle (prominent, above chart) ─────────────────────────────
+ml_bar_col1, ml_bar_col2 = st.columns([4, 1], gap="small")
+
+with ml_bar_col1:
+    st.markdown(
+        '<div class="ml-toggle-bar">'
+        '<div class="ml-icon">🧠</div>'
+        '<div class="ml-text">'
+        '<h4>ML-Prognose aktivieren</h4>'
+        '<p>Prophet Time-Series · Integriert Abwasser, GrippeWeb, ARE & Google Trends</p>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
+
+with ml_bar_col2:
+    _ml_toggled = st.toggle(
+        "ML-Prognose",
+        value=st.session_state.ml_enabled,
+        key="ml_toggle_main",
+        help="Prophet Time-Series Modell statt einfacher 14-Tage-Verschiebung",
+    )
+    if _ml_toggled != st.session_state.ml_enabled:
+        st.session_state.ml_enabled = _ml_toggled
+        st.rerun()
 
 
 # ── Hero Chart: Correlation ──────────────────────────────────────────────────
@@ -882,11 +1014,19 @@ fig.add_shape(type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
 fig.add_annotation(x=today_str, y=1.06, yref="paper", text="HEUTE", showarrow=False, font=dict(size=9, color="#ef4444", family="Bricolage Grotesque"), bgcolor="rgba(239,68,68,0.1)", borderpad=3, bordercolor="rgba(239,68,68,0.2)", borderwidth=1)
 fig.add_annotation(x=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), y=0.93, yref="paper", text="14-Tage Lag", showarrow=False, font=dict(size=9, color="#524e48", family="Bricolage Grotesque"), bgcolor="rgba(11,11,20,0.85)", borderpad=4, bordercolor="rgba(255,255,255,0.08)", borderwidth=1)
 
+# Auto-zoom to forecast window when ML is active
+_chart_xrange = None
+if use_ml and ml_model_info:
+    _zoom_start = (today - pd.Timedelta(days=21)).strftime("%Y-%m-%d")
+    _zoom_end = (today + pd.Timedelta(days=forecast_horizon + 3)).strftime("%Y-%m-%d")
+    _chart_xrange = [_zoom_start, _zoom_end]
+
 fig.update_layout(
     template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(11,11,20,0.5)",
     height=480, margin=dict(l=0, r=0, t=50, b=10),
     legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(size=10, color="#8a857e", family="Bricolage Grotesque"), bgcolor="rgba(0,0,0,0)"),
     hovermode="x unified", hoverlabel=dict(bgcolor="#16162a", bordercolor="rgba(212,149,106,0.15)", font_size=12, font_family="Bricolage Grotesque"),
+    **({"xaxis_range": _chart_xrange} if _chart_xrange else {}),
 )
 fig.update_xaxes(
     gridcolor="rgba(255,255,255,0.03)", dtick="M1", tickformat="%b '%y",
