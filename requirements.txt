@@ -7,3 +7,4 @@ requests>=2.31.0
 reportlab>=4.0
 kaleido>=0.2.1
 prophet>=1.1.0
+pytrends>=4.9.0

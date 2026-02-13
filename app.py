@@ -46,6 +46,13 @@ from modules.regional_aggregation import (
 )
 from modules.ml_forecaster import LabVolumeForecaster
 from modules.alert_engine import AlertManager, AlertRule
+from modules.external_data import (
+    fetch_grippeweb,
+    fetch_are_konsultation,
+    fetch_trends_for_pathogen,
+    get_trends_limitations,
+    PATHOGEN_SEARCH_TERMS,
+)
 
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -457,8 +464,8 @@ st.markdown(
 
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
-tab_overview, tab_detail, tab_regional = st.tabs([
-    "Uebersicht", "Pathogen-Analyse", "Regionale Analyse"
+tab_overview, tab_detail, tab_regional, tab_signals = st.tabs([
+    "Uebersicht", "Pathogen-Analyse", "Regionale Analyse", "Externe Signale"
 ])
 
 
@@ -1000,6 +1007,219 @@ with tab_regional:
                         hide_index=True,
                         height=450,
                     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4: EXTERNAL SIGNALS (GrippeWeb, ARE, Google Trends)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_signals:
+    st.markdown('<div class="section-header">Externe Surveillance-Signale</div>', unsafe_allow_html=True)
+
+    sig_col1, sig_col2 = st.columns(2, gap="medium")
+
+    # ── GrippeWeb ─────────────────────────────────────────────────────────────
+    with sig_col1:
+        st.markdown(
+            '<div class="section-header">GrippeWeb — Bevoelkerungsinzidenz</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Freiwillige Online-Meldungen akuter Atemwegserkrankungen (ARE/ILI)")
+
+        gw_type = st.radio(
+            "Erkrankungstyp",
+            ["ARE", "ILI"],
+            horizontal=True,
+            key="gw_type",
+            help="ARE = Akute Atemwegserkrankung, ILI = Influenza-like Illness",
+        )
+
+        with st.spinner("Lade GrippeWeb-Daten …"):
+            gw_df = fetch_grippeweb(erkrankung=gw_type, region="Bundesweit")
+
+        if not gw_df.empty:
+            # Last 2 years
+            gw_recent = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
+
+            fig_gw = go.Figure()
+            fig_gw.add_trace(
+                go.Scatter(
+                    x=gw_recent["date"], y=gw_recent["incidence"],
+                    name=f"GrippeWeb {gw_type}",
+                    fill="tozeroy",
+                    line=dict(color="#8b5cf6", width=2),
+                    fillcolor="rgba(139,92,246,0.08)",
+                    hovertemplate="%{x|%d %b %Y}: %{y:,.1f} / 100.000<extra></extra>",
+                )
+            )
+
+            # Add today marker
+            fig_gw.add_shape(
+                type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
+                line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"),
+            )
+
+            fig_gw.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(17,24,39,0.5)",
+                height=300, margin=dict(l=0, r=0, t=10, b=0),
+                yaxis_title="Inzidenz / 100.000",
+                yaxis_title_font=dict(size=10, color="#64748b"),
+                showlegend=False,
+                hovermode="x unified",
+            )
+            fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
+            fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
+
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            st.plotly_chart(fig_gw, use_container_width=True, key="grippeweb_chart")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            # Summary stats
+            if len(gw_recent) >= 2:
+                latest = gw_recent["incidence"].iloc[-1]
+                prev = gw_recent["incidence"].iloc[-2]
+                change = ((latest - prev) / prev * 100) if prev > 0 else 0
+                st.caption(
+                    f"Aktuelle KW: {latest:,.1f} / 100.000 "
+                    f"({change:+.1f}% vs. Vorwoche) · "
+                    f"{len(gw_recent)} Wochen Daten"
+                )
+        else:
+            st.info("GrippeWeb-Daten konnten nicht geladen werden.")
+
+    # ── ARE-Konsultationsinzidenz ─────────────────────────────────────────────
+    with sig_col2:
+        st.markdown(
+            '<div class="section-header">ARE-Konsultationsinzidenz</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Praxen-Sentinel: Arztbesuche wegen akuter Atemwegserkrankungen")
+
+        with st.spinner("Lade ARE-Daten …"):
+            are_df = fetch_are_konsultation(bundesland="Bundesweit")
+
+        if not are_df.empty:
+            are_recent = are_df[are_df["date"] >= (today - pd.Timedelta(days=730))].copy()
+
+            fig_are = go.Figure()
+            fig_are.add_trace(
+                go.Scatter(
+                    x=are_recent["date"], y=are_recent["consultation_incidence"],
+                    name="ARE Konsultationen",
+                    fill="tozeroy",
+                    line=dict(color="#06b6d4", width=2),
+                    fillcolor="rgba(6,182,212,0.08)",
+                    hovertemplate="%{x|%d %b %Y}: %{y:,.0f} / 100.000<extra></extra>",
+                )
+            )
+
+            fig_are.add_shape(
+                type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
+                line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"),
+            )
+
+            fig_are.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(17,24,39,0.5)",
+                height=300, margin=dict(l=0, r=0, t=10, b=0),
+                yaxis_title="Konsultationen / 100.000",
+                yaxis_title_font=dict(size=10, color="#64748b"),
+                showlegend=False,
+                hovermode="x unified",
+            )
+            fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
+            fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
+
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            st.plotly_chart(fig_are, use_container_width=True, key="are_chart")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if len(are_recent) >= 2:
+                latest = are_recent["consultation_incidence"].iloc[-1]
+                prev = are_recent["consultation_incidence"].iloc[-2]
+                change = ((latest - prev) / prev * 100) if prev > 0 else 0
+                st.caption(
+                    f"Aktuelle KW: {latest:,.0f} / 100.000 "
+                    f"({change:+.1f}% vs. Vorwoche) · "
+                    f"{len(are_recent)} Wochen Daten"
+                )
+        else:
+            st.info("ARE-Konsultationsdaten konnten nicht geladen werden.")
+
+    # ── Google Trends ─────────────────────────────────────────────────────────
+    st.markdown('<div class="section-header">Google Trends — Suchinteresse</div>', unsafe_allow_html=True)
+
+    terms = PATHOGEN_SEARCH_TERMS.get(selected_pathogen, [])
+    if terms:
+        st.caption(
+            f"Suchbegriffe fuer {selected_pathogen}: " +
+            ", ".join(f'"{t}"' for t in terms)
+        )
+
+        with st.spinner("Lade Google Trends …"):
+            trends_df = fetch_trends_for_pathogen(selected_pathogen, timeframe="today 12-m")
+
+        if not trends_df.empty:
+            fig_trends = go.Figure()
+
+            term_cols = [c for c in trends_df.columns if c not in ("date", "avg_interest")]
+            colors = ["#f77f00", "#3b82f6", "#22c55e", "#a855f7", "#ef4444"]
+
+            for i, col in enumerate(term_cols):
+                fig_trends.add_trace(
+                    go.Scatter(
+                        x=trends_df["date"], y=trends_df[col],
+                        name=col,
+                        line=dict(color=colors[i % len(colors)], width=1.5),
+                        opacity=0.6,
+                        hovertemplate=f"{col}: " + "%{y}<extra></extra>",
+                    )
+                )
+
+            # Average line (bold)
+            if "avg_interest" in trends_df.columns:
+                fig_trends.add_trace(
+                    go.Scatter(
+                        x=trends_df["date"], y=trends_df["avg_interest"],
+                        name="Durchschnitt",
+                        line=dict(color="#f1f5f9", width=2.5),
+                        hovertemplate="Ø Interesse: %{y:.0f}<extra></extra>",
+                    )
+                )
+
+            fig_trends.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(17,24,39,0.5)",
+                height=300, margin=dict(l=0, r=0, t=10, b=0),
+                yaxis_title="Relatives Suchinteresse (0-100)",
+                yaxis_title_font=dict(size=10, color="#64748b"),
+                legend=dict(
+                    orientation="h", y=1.12, x=0.5, xanchor="center",
+                    font=dict(size=9, color="#94a3b8"), bgcolor="rgba(0,0,0,0)",
+                ),
+                hovermode="x unified",
+            )
+            fig_trends.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
+            fig_trends.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
+
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            st.plotly_chart(fig_trends, use_container_width=True, key="trends_chart")
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info(
+                "Google Trends nicht verfuegbar. "
+                "Moegliche Ursache: pytrends nicht installiert oder Rate-Limit erreicht."
+            )
+
+        # Limitations expander
+        with st.expander("Google Trends — Einschraenkungen"):
+            for lim in get_trends_limitations():
+                st.caption(f"• {lim}")
+    else:
+        st.info(f"Keine Suchbegriffe fuer {selected_pathogen} definiert.")
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────
