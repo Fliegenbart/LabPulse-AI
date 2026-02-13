@@ -49,6 +49,7 @@ from modules.alert_engine import AlertManager, AlertRule
 from modules.external_data import (
     fetch_grippeweb,
     fetch_are_konsultation,
+    fetch_google_trends,
     fetch_trends_for_pathogen,
     get_trends_limitations,
     PATHOGEN_SEARCH_TERMS,
@@ -529,16 +530,25 @@ with kpi_col:
         )
 
 with signal_col:
-    # Signal-Konfidenz (compact)
+    # Signal-Konfidenz (compact) — all 4 signals including Google Trends
     with st.spinner("Signale …"):
         _gw_fusion = fetch_grippeweb(erkrankung="ARE", region="Bundesweit")
         _are_fusion = fetch_are_konsultation(bundesland="Bundesweit")
+        # Google Trends for selected pathogen
+        try:
+            _trends_terms = PATHOGEN_SEARCH_TERMS.get(selected_pathogen, [])
+            if _trends_terms:
+                _trends_fusion = fetch_google_trends(_trends_terms, timeframe="today 3-m", geo="DE")
+            else:
+                _trends_fusion = None
+        except Exception:
+            _trends_fusion = None
 
     composite = fuse_all_signals(
         wastewater_df=wastewater_df,
         grippeweb_df=_gw_fusion,
         are_df=_are_fusion,
-        trends_df=None,
+        trends_df=_trends_fusion,
     )
 
     conf = composite.confidence_pct
