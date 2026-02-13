@@ -96,14 +96,22 @@ html, body, [class*="css"] { font-family: var(--font); }
 /* ── ML Toggle ── */
 .zen-ml-row {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.8rem 1.2rem;
-    margin-bottom: 2rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    padding: 1.4rem 1.8rem;
+    margin-bottom: 2.5rem;
+    background: linear-gradient(135deg, var(--surface), rgba(212,149,106,0.04));
+    border: 1.5px solid rgba(212,149,106,0.15);
     border-radius: var(--radius);
 }
-.zen-ml-row .label { font-size: 0.85rem; color: var(--text); font-weight: 600; }
-.zen-ml-row .sub { font-size: 0.72rem; color: var(--dim); margin-top: 0.1rem; }
+.zen-ml-row .label { font-size: 1.1rem; color: var(--text); font-weight: 600; }
+.zen-ml-row .sub { font-size: 0.78rem; color: var(--dim); margin-top: 0.2rem; }
+/* Bigger toggle switch */
+[data-testid="stCheckbox"]:has(input[aria-label="ML-Prognose aktivieren"]) label {
+    transform: scale(1.5); transform-origin: left center;
+    padding: 0.3rem 0;
+}
+[data-testid="stCheckbox"]:has(input[aria-label="ML-Prognose aktivieren"]) span[data-testid="stCheckboxLabel"] {
+    font-size: 0.9rem !important; font-weight: 600 !important; color: var(--accent) !important;
+}
 
 /* ── Alert ── */
 .zen-alert {
@@ -351,16 +359,13 @@ st.markdown(
 )
 
 # ── ML Toggle (the ONE primary action) ──────────────────────────────────────
-ml_col1, ml_col2 = st.columns([5, 1], gap="small")
-with ml_col1:
-    _ml_label = "ML-Prognose aktiv" if use_ml else "ML-Prognose"
-    _ml_sub = f"Prophet · {ml_model_info.get('confidence_score', 0):.0f}% Konfidenz" if (use_ml and ml_model_info) else "Prophet Time-Series aktivieren"
-    st.markdown(f'<div class="zen-ml-row"><div><div class="label">{_ml_label}</div><div class="sub">{_ml_sub}</div></div></div>', unsafe_allow_html=True)
-with ml_col2:
-    _toggled = st.toggle("ML", value=st.session_state.ml_enabled, key="ml_zen", label_visibility="collapsed")
-    if _toggled != st.session_state.ml_enabled:
-        st.session_state.ml_enabled = _toggled
-        st.rerun()
+_ml_label = "🧠 ML-Prognose aktiv" if use_ml else "🧠 ML-Prognose"
+_ml_sub = f"Prophet · {ml_model_info.get('confidence_score', 0):.0f}% Konfidenz" if (use_ml and ml_model_info) else "Prophet Time-Series aktivieren"
+st.markdown(f'<div class="zen-ml-row"><div><div class="label">{_ml_label}</div><div class="sub">{_ml_sub}</div></div></div>', unsafe_allow_html=True)
+_toggled = st.toggle("ML-Prognose aktivieren", value=st.session_state.ml_enabled, key="ml_zen")
+if _toggled != st.session_state.ml_enabled:
+    st.session_state.ml_enabled = _toggled
+    st.rerun()
 
 
 # ── THE CHART (hero — the product IS this chart) ────────────────────────────
