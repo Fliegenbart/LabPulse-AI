@@ -5,7 +5,17 @@ services:
     restart: unless-stopped
     ports:
       - "8501:8501"
-    mem_limit: 512m
-    cpus: 1.0
+    mem_limit: 1g
+    cpus: 2.0
     environment:
       - TZ=Europe/Berlin
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5:7b
+      - OLLAMA_TIMEOUT=30
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - labpulse-data:/app/data
+
+volumes:
+  labpulse-data:

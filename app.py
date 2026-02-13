@@ -2,25 +2,50 @@
 LabPulse AI — Streamlit Dashboard
 ==================================
 Predictive reagent demand management powered by RKI wastewater surveillance.
-Built for Ganzimmun Diagnostics (Limbach Group) — Hackathon MVP.
+Built for Ganzimmun Diagnostics (Limbach Group).
+
+Features:
+- Multi-pathogen overview with sparklines
+- Per-pathogen deep dive with correlation + burndown charts
+- AI-powered insights via local Ollama
+- ML forecasting (Prophet) with simple fallback
+- PDF report export
+- CSV upload for real lab data
+- Regional hotspot map (Bundesland)
+- Automated alerts (webhook / email)
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 from plotly.subplots import make_subplots
 from datetime import datetime
 
 from data_engine import (
     fetch_rki_raw,
     fetch_rki_wastewater,
+    fetch_all_pathogens,
     get_available_pathogens,
     generate_lab_volume,
     build_forecast,
     AVG_REVENUE_PER_TEST,
     PATHOGEN_REAGENT_MAP,
+    PATHOGEN_GROUPS,
+    PATHOGEN_SCALE,
 )
+from modules.ollama_client import get_client as get_ollama_client
+from modules.pdf_export import generate_report as generate_pdf_report
+from modules.lab_data_merger import validate_csv, merge_with_synthetic, get_data_quality_summary
+from modules.regional_aggregation import (
+    aggregate_by_bundesland,
+    create_scatter_map_data,
+    BUNDESLAND_COORDS,
+    GERMANY_CENTER,
+)
+from modules.ml_forecaster import LabVolumeForecaster
+from modules.alert_engine import AlertManager, AlertRule
 
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -150,6 +175,17 @@ st.markdown(
         font-size: 0.88rem;
         line-height: 1.6;
     }
+    .alert-ai {
+        background: linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(168,85,247,0.04) 100%);
+        border: 1px solid rgba(168,85,247,0.2);
+        border-left: 4px solid #a855f7;
+        border-radius: var(--radius-sm);
+        padding: 1rem 1.25rem;
+        margin: 0.75rem 0 1.5rem 0;
+        color: #d8b4fe;
+        font-size: 0.88rem;
+        line-height: 1.6;
+    }
 
     .chart-container {
         background: var(--bg-card);
@@ -206,6 +242,50 @@ st.markdown(
         letter-spacing: 0.04em; margin-left: 0.4rem;
     }
 
+    .sparkline-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius);
+        padding: 1rem 1.2rem;
+        transition: border-color 0.2s ease, transform 0.15s ease;
+        cursor: pointer;
+    }
+    .sparkline-card:hover {
+        border-color: rgba(247, 127, 0, 0.3);
+        transform: translateY(-2px);
+    }
+    .sparkline-title {
+        color: var(--text-muted);
+        font-size: 0.7rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .sparkline-value {
+        color: var(--text-primary);
+        font-size: 1.3rem; font-weight: 700;
+        margin: 0.3rem 0;
+    }
+    .sparkline-trend-up { color: var(--accent-red); font-size: 0.8rem; }
+    .sparkline-trend-down { color: var(--accent-green); font-size: 0.8rem; }
+    .sparkline-trend-flat { color: var(--text-muted); font-size: 0.8rem; }
+
+    .confidence-badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 99px;
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+    .confidence-high { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .confidence-medium { background: rgba(247,127,0,0.15); color: #f77f00; }
+    .confidence-low { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+    .data-quality {
+        display: flex; gap: 0.5rem; align-items: center;
+        padding: 0.4rem 0; font-size: 0.75rem;
+    }
+    .dq-real { color: var(--accent-green); }
+    .dq-synthetic { color: var(--text-muted); }
+
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] { background: transparent; }
@@ -216,15 +296,22 @@ st.markdown(
 
 
 # ── Data Loading (cached) ───────────────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner="Fetching RKI wastewater data …")
+@st.cache_data(ttl=3600, show_spinner="Lade RKI-Abwasserdaten …")
 def load_raw():
     return fetch_rki_raw()
+
+
+# ── Session State Defaults ───────────────────────────────────────────────────
+if "uploaded_lab_data" not in st.session_state:
+    st.session_state.uploaded_lab_data = None
+if "alert_webhook_url" not in st.session_state:
+    st.session_state.alert_webhook_url = ""
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
-        '# 🧬 LabPulse AI <span class="sidebar-pill">BETA</span>',
+        '# 🧬 LabPulse AI <span class="sidebar-pill">v2.0</span>',
         unsafe_allow_html=True,
     )
     st.caption("Ganzimmun Diagnostics · Limbach Group")
@@ -235,7 +322,7 @@ with st.sidebar:
     raw_df = load_raw()
     pathogens = get_available_pathogens(raw_df)
     selected_pathogen = st.selectbox(
-        "Select Pathogen",
+        "Pathogen waehlen",
         pathogens,
         index=0,
         label_visibility="collapsed",
@@ -245,43 +332,93 @@ with st.sidebar:
     if reagent_info:
         st.caption(
             f"Kit: {reagent_info.get('test_name', '–')} · "
-            f"€{reagent_info.get('cost_per_test', 45)}/test"
+            f"EUR {reagent_info.get('cost_per_test', 45)}/Test"
         )
 
     st.markdown("")
-    st.markdown('<div class="sidebar-label">Forecast Configuration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-label">Prognose-Konfiguration</div>', unsafe_allow_html=True)
     forecast_horizon = st.slider(
-        "Forecast Horizon (days)", min_value=7, max_value=21, value=14, step=7
+        "Prognose-Horizont (Tage)", min_value=7, max_value=21, value=14, step=7
     )
     safety_buffer = st.slider(
-        "Safety Stock Buffer (%)", min_value=0, max_value=30, value=10, step=5
+        "Sicherheitspuffer (%)", min_value=0, max_value=30, value=10, step=5
     )
     stock_on_hand = st.number_input(
-        "Current Reagent Stock (units)", min_value=0, value=5000, step=500
+        "Aktueller Reagenzbestand (Einheiten)", min_value=0, value=5000, step=500
     )
 
+    # ML Model toggle
     st.markdown("")
-    st.markdown('<div class="sidebar-label">Stress Test</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-label">Prognosemodell</div>', unsafe_allow_html=True)
+    use_ml = st.toggle("ML-Prognose (Prophet)", value=False, help="Prophet Time-Series statt einfacher 14-Tage-Verschiebung")
+
+    st.markdown("")
+    st.markdown('<div class="sidebar-label">Stresstest</div>', unsafe_allow_html=True)
     scenario_uplift = st.slider(
-        "Virus Load Uplift (%)",
+        "Viruslast-Uplift (%)",
         min_value=0, max_value=50, value=0, step=5,
-        help="Simulate a sudden spike to stress-test supply chain resilience.",
+        help="Simuliert einen ploetzlichen Anstieg.",
     )
 
+    # CSV Upload
     st.markdown("")
-    refresh = st.button("Refresh Data from RKI", use_container_width=True, type="secondary")
-    if refresh:
-        st.cache_data.clear()
-        raw_df = load_raw()
+    st.markdown('<div class="sidebar-label">Reale Labordaten</div>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader(
+        "CSV hochladen (date, test_volume)",
+        type=["csv"],
+        label_visibility="collapsed",
+    )
+    if uploaded_file is not None:
+        is_valid, msg, real_df = validate_csv(uploaded_file)
+        if is_valid:
+            st.session_state.uploaded_lab_data = real_df
+            st.success(msg)
+        else:
+            st.error(msg)
+
+    # Alert Config
+    st.markdown("")
+    st.markdown('<div class="sidebar-label">Benachrichtigungen</div>', unsafe_allow_html=True)
+    alert_webhook = st.text_input(
+        "Webhook-URL (Slack/Teams)",
+        value=st.session_state.alert_webhook_url,
+        placeholder="https://hooks.slack.com/...",
+        label_visibility="collapsed",
+    )
+    st.session_state.alert_webhook_url = alert_webhook
 
     st.markdown("")
-    st.caption(f"Last sync: {datetime.now().strftime('%H:%M')} · RKI AMELAG")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        refresh = st.button("Daten laden", use_container_width=True, type="secondary")
+        if refresh:
+            st.cache_data.clear()
+            raw_df = load_raw()
+    with col_btn2:
+        # PDF button placeholder — actual download is in main area
+        pass
+
+    st.markdown("")
+    st.caption(f"Letzter Sync: {datetime.now().strftime('%H:%M')} · RKI AMELAG")
 
 
-# ── Load pathogen-specific data ──────────────────────────────────────────────
+# ── Load Pathogen-Specific Data ──────────────────────────────────────────────
 wastewater_df = fetch_rki_wastewater(raw_df, pathogen=selected_pathogen)
 lab_df = generate_lab_volume(wastewater_df, lag_days=14, pathogen=selected_pathogen)
 
+# Merge with real data if uploaded
+if st.session_state.uploaded_lab_data is not None:
+    lab_df = merge_with_synthetic(lab_df, st.session_state.uploaded_lab_data, selected_pathogen)
+
+# ML Forecast
+ml_model_info = None
+if use_ml:
+    forecaster = LabVolumeForecaster(lab_df, wastewater_df, selected_pathogen)
+    forecaster.train()
+    ml_model_info = forecaster.model_info
+    ml_forecast = forecaster.forecast(periods=forecast_horizon)
+
+# Standard forecast (always computed for table/KPIs)
 forecast_df, kpis = build_forecast(
     lab_df,
     horizon_days=forecast_horizon,
@@ -291,9 +428,17 @@ forecast_df, kpis = build_forecast(
     pathogen=selected_pathogen,
 )
 
-# Revenue column name (dynamic per pathogen)
+# Revenue column name
 rev_col = [c for c in forecast_df.columns if "Revenue" in c]
 rev_col_name = rev_col[0] if rev_col else "Est. Revenue"
+
+
+# ── Alerts Evaluation ────────────────────────────────────────────────────────
+alert_mgr = AlertManager()
+triggered_alerts = alert_mgr.evaluate_all(kpis, ml_model_info)
+
+if triggered_alerts and alert_webhook:
+    alert_mgr.send_webhook(alert_webhook, triggered_alerts, selected_pathogen)
 
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -310,287 +455,561 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Alert Banners ────────────────────────────────────────────────────────────
-if kpis.get("risk_eur", 0) > 0:
-    stockout = kpis.get("stockout_day")
-    stockout_str = (
-        f" Stock depleted by <strong>{stockout.strftime('%d %b %Y')}</strong>."
-        if stockout else ""
-    )
-    st.markdown(
-        f'<div class="alert-critical">'
-        f"<strong>CRITICAL</strong> — {selected_pathogen}: Revenue at Risk "
-        f"<strong>€{kpis['risk_eur']:,.0f}</strong> "
-        f"over the next {forecast_horizon} days.{stockout_str} "
-        f"Immediate reorder of {kpis.get('test_name', 'reagents')} recommended."
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-elif scenario_uplift > 0:
-    st.markdown(
-        f'<div class="alert-info">'
-        f"<strong>Simulation Active</strong> — {selected_pathogen} scenario with "
-        f"+{scenario_uplift}% virus load uplift."
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+
+# ── Tabs ─────────────────────────────────────────────────────────────────────
+tab_overview, tab_detail, tab_regional = st.tabs([
+    "Uebersicht", "Pathogen-Analyse", "Regionale Analyse"
+])
 
 
-# ── Section 1: KPI Dashboard ────────────────────────────────────────────────
-st.markdown('<div class="section-header">Key Metrics</div>', unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 1: OVERVIEW (Multi-Pathogen Sparklines)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_overview:
+    st.markdown('<div class="section-header">Alle Pathogene auf einen Blick</div>', unsafe_allow_html=True)
 
-c1, c2, c3, c4, c5 = st.columns(5, gap="medium")
-with c1:
-    st.metric("Predicted Tests (7 d)", f"{kpis['predicted_tests_7d']:,}")
-with c2:
-    st.metric("Revenue Forecast (7 d)", f"€{kpis['revenue_forecast_7d']:,.0f}")
-with c3:
-    st.metric(
-        "Reagent Status", kpis["reagent_status"],
-        delta="Stock OK" if "Optimal" in kpis["reagent_status"] else "Stockout Risk!",
-        delta_color="normal" if "Optimal" in kpis["reagent_status"] else "inverse",
-    )
-with c4:
-    risk_val = kpis.get("risk_eur", 0)
-    st.metric(
-        "Revenue at Risk", f"€{risk_val:,.0f}",
-        delta="No risk" if risk_val == 0 else "Action needed!",
-        delta_color="off" if risk_val == 0 else "inverse",
-    )
-with c5:
-    st.metric(
-        "Week-over-Week", f"{kpis['trend_pct']:+.1f}%",
-        delta=f"{kpis['trend_pct']:+.1f}%",
-        delta_color="normal" if kpis["trend_pct"] >= 0 else "inverse",
-    )
+    overview_cols = st.columns(len(pathogens), gap="medium")
+
+    for i, pathogen_name in enumerate(pathogens):
+        with overview_cols[i]:
+            try:
+                ww = fetch_rki_wastewater(raw_df, pathogen=pathogen_name)
+                lab = generate_lab_volume(ww, lag_days=14, pathogen=pathogen_name)
+                _, p_kpis = build_forecast(lab, pathogen=pathogen_name, stock_on_hand=stock_on_hand)
+
+                trend = p_kpis.get("trend_pct", 0)
+                if trend > 5:
+                    trend_class = "sparkline-trend-up"
+                    trend_icon = "↑"
+                elif trend < -5:
+                    trend_class = "sparkline-trend-down"
+                    trend_icon = "↓"
+                else:
+                    trend_class = "sparkline-trend-flat"
+                    trend_icon = "→"
+
+                status = p_kpis.get("reagent_status", "N/A")
+                pred_7d = p_kpis.get("predicted_tests_7d", 0)
+
+                st.markdown(
+                    f'<div class="sparkline-card">'
+                    f'<div class="sparkline-title">{pathogen_name}</div>'
+                    f'<div class="sparkline-value">{pred_7d:,}</div>'
+                    f'<div class="{trend_class}">{trend_icon} {trend:+.1f}% WoW</div>'
+                    f'<div style="color: var(--text-muted); font-size: 0.7rem; margin-top: 0.3rem;">{status}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Mini sparkline chart
+                recent = lab.tail(14)
+                if not recent.empty:
+                    fig_spark = go.Figure(
+                        go.Scatter(
+                            x=recent["date"], y=recent["order_volume"],
+                            mode="lines",
+                            line=dict(color="#f77f00", width=2),
+                            fill="tozeroy",
+                            fillcolor="rgba(247,127,0,0.08)",
+                        )
+                    )
+                    fig_spark.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        height=80,
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        xaxis=dict(visible=False),
+                        yaxis=dict(visible=False),
+                        showlegend=False,
+                    )
+                    st.plotly_chart(fig_spark, use_container_width=True)
+
+            except Exception as exc:
+                st.caption(f"{pathogen_name}: Fehler ({exc})")
 
 
-# ── Section 2: Correlation Chart ────────────────────────────────────────────
-st.markdown(
-    f'<div class="section-header">{selected_pathogen} — Wastewater vs. Lab Volume</div>',
-    unsafe_allow_html=True,
-)
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 2: PATHOGEN DEEP DIVE
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_detail:
 
-today = pd.Timestamp(datetime.today()).normalize()
-chart_start = today - pd.Timedelta(days=120)
-
-ww_chart = wastewater_df[wastewater_df["date"] >= chart_start].copy()
-lab_chart = lab_df[lab_df["date"] >= chart_start].copy()
-lab_actuals = lab_chart[lab_chart["date"] <= today]
-
-lab_forecast_chart = forecast_df.rename(
-    columns={"Date": "date", "Predicted Volume": "order_volume"}
-)
-
-fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-# Wastewater raw (faint)
-fig.add_trace(
-    go.Scatter(
-        x=ww_chart["date"], y=ww_chart["virus_load"],
-        name="Virus Load (Daily)", showlegend=False,
-        line=dict(color="#3b82f6", width=0.5), opacity=0.15,
-        fill="tozeroy", fillcolor="rgba(59,130,246,0.03)",
-        hovertemplate="%{x|%d %b}: %{y:,.0f} copies/L<extra></extra>",
-    ),
-    secondary_y=False,
-)
-
-# Wastewater 7d average
-ww_smoothed = ww_chart.copy()
-ww_smoothed["vl_7d"] = ww_smoothed["virus_load"].rolling(7, min_periods=1).mean()
-fig.add_trace(
-    go.Scatter(
-        x=ww_smoothed["date"], y=ww_smoothed["vl_7d"],
-        name="Virus Load (7d Avg)",
-        line=dict(color="#3b82f6", width=2),
-        hovertemplate="%{x|%d %b}: %{y:,.0f} avg copies/L<extra></extra>",
-    ),
-    secondary_y=False,
-)
-
-# Lab raw (faint)
-fig.add_trace(
-    go.Scatter(
-        x=lab_actuals["date"], y=lab_actuals["order_volume"],
-        name="Lab Tests (Daily)", showlegend=False,
-        line=dict(color="#f77f00", width=1), opacity=0.2,
-        hovertemplate="%{x|%d %b}: %{y:,.0f} tests<extra></extra>",
-    ),
-    secondary_y=True,
-)
-
-# Lab 7d average
-lab_smoothed = lab_actuals.copy()
-lab_smoothed["vol_7d"] = lab_smoothed["order_volume"].rolling(7, min_periods=1).mean()
-fig.add_trace(
-    go.Scatter(
-        x=lab_smoothed["date"], y=lab_smoothed["vol_7d"],
-        name="Lab Tests (7d Avg)",
-        line=dict(color="#f77f00", width=2.5),
-        hovertemplate="%{x|%d %b}: %{y:,.0f} avg/day<extra></extra>",
-    ),
-    secondary_y=True,
-)
-
-# Forecast (dashed)
-if not lab_forecast_chart.empty:
-    vol_col = "order_volume"
-    if not lab_actuals.empty:
-        connector = pd.DataFrame(
-            {"date": [lab_actuals["date"].iloc[-1]], vol_col: [lab_actuals["order_volume"].iloc[-1]]}
+    # ── Alert Banners ────────────────────────────────────────────────────────
+    if kpis.get("risk_eur", 0) > 0:
+        stockout = kpis.get("stockout_day")
+        stockout_str = (
+            f" Lager erschoepft bis <strong>{stockout.strftime('%d. %b %Y')}</strong>."
+            if stockout else ""
         )
-        fc_plot = pd.concat([connector, lab_forecast_chart], ignore_index=True)
-    else:
-        fc_plot = lab_forecast_chart
+        st.markdown(
+            f'<div class="alert-critical">'
+            f"<strong>KRITISCH</strong> — {selected_pathogen}: Revenue at Risk "
+            f"<strong>EUR {kpis['risk_eur']:,.0f}</strong> "
+            f"in den naechsten {forecast_horizon} Tagen.{stockout_str} "
+            f"Sofortige Nachbestellung von {kpis.get('test_name', 'Reagenzien')} empfohlen."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    elif scenario_uplift > 0:
+        st.markdown(
+            f'<div class="alert-info">'
+            f"<strong>Simulation aktiv</strong> — {selected_pathogen}-Szenario mit "
+            f"+{scenario_uplift}% Viruslast-Uplift."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
-    label = f"Forecast (+{scenario_uplift}%)" if scenario_uplift > 0 else "Forecast"
+    # ── Data Quality Badge ───────────────────────────────────────────────────
+    if st.session_state.uploaded_lab_data is not None:
+        dq = get_data_quality_summary(lab_df)
+        st.markdown(
+            f'<div class="data-quality">'
+            f'<span class="dq-real">● {dq.get("real_pct", 0)}% Realdaten</span>'
+            f'<span class="dq-synthetic">● {dq.get("synthetic_pct", 100)}% Synthetisch</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── ML Model Badge ───────────────────────────────────────────────────────
+    if use_ml and ml_model_info:
+        conf = ml_model_info.get("confidence_score", 0)
+        if conf >= 70:
+            conf_class = "confidence-high"
+        elif conf >= 50:
+            conf_class = "confidence-medium"
+        else:
+            conf_class = "confidence-low"
+        st.markdown(
+            f'<span class="confidence-badge {conf_class}">'
+            f'ML-Modell: {ml_model_info["model_type"]} · Konfidenz: {conf:.0f}%'
+            f'</span>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Section 1: KPI Dashboard ─────────────────────────────────────────────
+    st.markdown('<div class="section-header">Kennzahlen</div>', unsafe_allow_html=True)
+
+    c1, c2, c3, c4, c5 = st.columns(5, gap="medium")
+    with c1:
+        st.metric("Progn. Tests (7 d)", f"{kpis['predicted_tests_7d']:,}")
+    with c2:
+        st.metric("Umsatzprognose (7 d)", f"EUR {kpis['revenue_forecast_7d']:,.0f}")
+    with c3:
+        st.metric(
+            "Reagenzstatus", kpis["reagent_status"],
+            delta="Bestand OK" if "Optimal" in kpis["reagent_status"] else "Stockout-Risiko!",
+            delta_color="normal" if "Optimal" in kpis["reagent_status"] else "inverse",
+        )
+    with c4:
+        risk_val = kpis.get("risk_eur", 0)
+        st.metric(
+            "Revenue at Risk", f"EUR {risk_val:,.0f}",
+            delta="Kein Risiko" if risk_val == 0 else "Handlungsbedarf!",
+            delta_color="off" if risk_val == 0 else "inverse",
+        )
+    with c5:
+        st.metric(
+            "Woche-zu-Woche", f"{kpis['trend_pct']:+.1f}%",
+            delta=f"{kpis['trend_pct']:+.1f}%",
+            delta_color="normal" if kpis["trend_pct"] >= 0 else "inverse",
+        )
+
+    # ── Section 2: Correlation Chart ─────────────────────────────────────────
+    st.markdown(
+        f'<div class="section-header">{selected_pathogen} — Abwasser vs. Laborvolumen</div>',
+        unsafe_allow_html=True,
+    )
+
+    today = pd.Timestamp(datetime.today()).normalize()
+    chart_start = today - pd.Timedelta(days=120)
+
+    ww_chart = wastewater_df[wastewater_df["date"] >= chart_start].copy()
+    lab_chart = lab_df[lab_df["date"] >= chart_start].copy()
+    lab_actuals = lab_chart[lab_chart["date"] <= today]
+
+    lab_forecast_chart = forecast_df.rename(
+        columns={"Date": "date", "Predicted Volume": "order_volume"}
+    )
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Wastewater raw (faint)
     fig.add_trace(
         go.Scatter(
-            x=fc_plot["date"], y=fc_plot[vol_col], name=label,
-            line=dict(color="#f77f00", width=2.5, dash="dot"),
-            hovertemplate="%{x|%d %b}: %{y:,.0f} predicted<extra></extra>",
+            x=ww_chart["date"], y=ww_chart["virus_load"],
+            name="Viruslast (taeglich)", showlegend=False,
+            line=dict(color="#3b82f6", width=0.5), opacity=0.15,
+            fill="tozeroy", fillcolor="rgba(59,130,246,0.03)",
+            hovertemplate="%{x|%d %b}: %{y:,.0f} Kopien/L<extra></extra>",
+        ),
+        secondary_y=False,
+    )
+
+    # Wastewater 7d average
+    ww_smoothed = ww_chart.copy()
+    ww_smoothed["vl_7d"] = ww_smoothed["virus_load"].rolling(7, min_periods=1).mean()
+    fig.add_trace(
+        go.Scatter(
+            x=ww_smoothed["date"], y=ww_smoothed["vl_7d"],
+            name="Viruslast (7d Ø)",
+            line=dict(color="#3b82f6", width=2),
+            hovertemplate="%{x|%d %b}: %{y:,.0f} Ø Kopien/L<extra></extra>",
+        ),
+        secondary_y=False,
+    )
+
+    # Lab raw (faint)
+    fig.add_trace(
+        go.Scatter(
+            x=lab_actuals["date"], y=lab_actuals["order_volume"],
+            name="Labortests (taeglich)", showlegend=False,
+            line=dict(color="#f77f00", width=1), opacity=0.2,
+            hovertemplate="%{x|%d %b}: %{y:,.0f} Tests<extra></extra>",
         ),
         secondary_y=True,
     )
 
-# TODAY marker
-today_str = today.strftime("%Y-%m-%d")
-fig.add_shape(
-    type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
-    line=dict(color="rgba(239,68,68,0.5)", width=1.5, dash="dot"),
-)
-fig.add_annotation(
-    x=today_str, y=1.06, yref="paper", text="TODAY", showarrow=False,
-    font=dict(size=9, color="#ef4444", family="Inter"),
-    bgcolor="rgba(239,68,68,0.1)", borderpad=3,
-    bordercolor="rgba(239,68,68,0.2)", borderwidth=1,
-)
-
-# Lag annotation
-fig.add_annotation(
-    x=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"),
-    y=0.93, yref="paper", text="14-day lag", showarrow=False,
-    font=dict(size=9, color="#64748b", family="Inter"),
-    bgcolor="rgba(15,20,35,0.85)", borderpad=4,
-    bordercolor="rgba(255,255,255,0.08)", borderwidth=1,
-)
-
-fig.update_layout(
-    template="plotly_dark",
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(17,24,39,0.5)",
-    height=420,
-    margin=dict(l=0, r=0, t=35, b=0),
-    legend=dict(
-        orientation="h", y=1.12, x=0.5, xanchor="center",
-        font=dict(size=10, color="#94a3b8", family="Inter"),
-        bgcolor="rgba(0,0,0,0)",
-    ),
-    hovermode="x unified",
-    hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12, font_family="Inter"),
-)
-fig.update_xaxes(gridcolor="rgba(255,255,255,0.03)", dtick="M1", tickformat="%b '%y", tickfont=dict(size=10, color="#64748b"))
-fig.update_yaxes(title_text="Virus Load", secondary_y=False, showgrid=False, title_font=dict(color="#3b82f6", size=11), tickfont=dict(size=9, color="#64748b"))
-fig.update_yaxes(title_text="Tests / Day", secondary_y=True, gridcolor="rgba(255,255,255,0.04)", title_font=dict(color="#f77f00", size=11), tickfont=dict(size=9, color="#64748b"))
-
-st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-st.plotly_chart(fig, use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ── Section 3: Burndown + Table side by side ─────────────────────────────────
-col_left, col_right = st.columns([1, 1], gap="medium")
-
-with col_left:
-    st.markdown('<div class="section-header">Reagent Stock Burndown</div>', unsafe_allow_html=True)
-
-    remaining = kpis.get("remaining_stock", [])
-    if remaining:
-        burndown_dates = forecast_df["Date"].values
-        fig_burn = go.Figure()
-
-        fig_burn.add_trace(
-            go.Scatter(
-                x=burndown_dates, y=remaining, name="Remaining Stock",
-                fill="tozeroy", line=dict(color="#22c55e", width=2),
-                fillcolor="rgba(34,197,94,0.1)",
-                hovertemplate="%{x|%d %b}: %{y:,.0f} units<extra></extra>",
-            )
-        )
-
-        cum_demand = np.cumsum(forecast_df["Predicted Volume"].values)
-        fig_burn.add_trace(
-            go.Scatter(
-                x=burndown_dates, y=cum_demand, name="Cumulative Demand",
-                line=dict(color="#ef4444", width=1.5, dash="dot"),
-                hovertemplate="%{x|%d %b}: %{y:,.0f} cumulative<extra></extra>",
-            )
-        )
-
-        fig_burn.add_hline(
-            y=stock_on_hand, line_dash="longdash", line_color="rgba(148,163,184,0.3)",
-            annotation_text=f"Stock: {stock_on_hand:,}", annotation_position="top left",
-            annotation_font_color="#64748b", annotation_font_size=10,
-        )
-
-        stockout_day = kpis.get("stockout_day")
-        if stockout_day is not None:
-            so_str = pd.Timestamp(stockout_day).strftime("%Y-%m-%d")
-            fig_burn.add_shape(
-                type="line", x0=so_str, x1=so_str, y0=0, y1=1, yref="paper",
-                line=dict(color="rgba(239,68,68,0.5)", width=1.5, dash="dash"),
-            )
-            fig_burn.add_annotation(
-                x=so_str, y=1.06, yref="paper", text="STOCKOUT", showarrow=False,
-                font=dict(size=9, color="#ef4444", family="Inter"),
-                bgcolor="rgba(239,68,68,0.1)", borderpad=3,
-                bordercolor="rgba(239,68,68,0.2)", borderwidth=1,
-            )
-
-        fig_burn.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(17,24,39,0.5)",
-            height=320, margin=dict(l=0, r=0, t=20, b=0),
-            legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center", font=dict(size=10, color="#94a3b8"), bgcolor="rgba(0,0,0,0)"),
-            hovermode="x unified",
-            hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12),
-            yaxis_title="Units", yaxis_title_font=dict(size=11, color="#64748b"),
-        )
-        fig_burn.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
-        fig_burn.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
-
-        st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-        st.plotly_chart(fig_burn, use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-with col_right:
-    st.markdown('<div class="section-header">Order Recommendations</div>', unsafe_allow_html=True)
-
-    def highlight_orders(row):
-        if row["Reagent Order"] > 0:
-            return ["background-color: rgba(239,68,68,0.1); color: #fca5a5; font-weight: 600;"] * len(row)
-        return ["color: #94a3b8;"] * len(row)
-
-    styled = forecast_df.style.apply(highlight_orders, axis=1).format(
-        {
-            "Predicted Volume": "{:,.0f}",
-            "Reagent Order": "{:,.0f}",
-            rev_col_name: "€{:,.0f}",
-        }
+    # Lab 7d average
+    lab_smoothed = lab_actuals.copy()
+    lab_smoothed["vol_7d"] = lab_smoothed["order_volume"].rolling(7, min_periods=1).mean()
+    fig.add_trace(
+        go.Scatter(
+            x=lab_smoothed["date"], y=lab_smoothed["vol_7d"],
+            name="Labortests (7d Ø)",
+            line=dict(color="#f77f00", width=2.5),
+            hovertemplate="%{x|%d %b}: %{y:,.0f} Ø/Tag<extra></extra>",
+        ),
+        secondary_y=True,
     )
 
-    st.dataframe(styled, use_container_width=True, hide_index=True, height=380)
+    # ML Forecast overlay (with confidence band)
+    if use_ml and ml_model_info and "ml_forecast" in dir():
+        try:
+            ml_fc = ml_forecast
+            fig.add_trace(
+                go.Scatter(
+                    x=ml_fc["date"], y=ml_fc["upper"],
+                    name="ML Upper", showlegend=False,
+                    line=dict(width=0), mode="lines",
+                ),
+                secondary_y=True,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=ml_fc["date"], y=ml_fc["lower"],
+                    name="ML-Konfidenzband",
+                    fill="tonexty", fillcolor="rgba(168,85,247,0.1)",
+                    line=dict(width=0), mode="lines",
+                ),
+                secondary_y=True,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=ml_fc["date"], y=ml_fc["predicted"],
+                    name="ML-Prognose",
+                    line=dict(color="#a855f7", width=2.5, dash="dash"),
+                    hovertemplate="%{x|%d %b}: %{y:,.0f} ML-Prognose<extra></extra>",
+                ),
+                secondary_y=True,
+            )
+        except Exception:
+            pass
+
+    # Standard forecast (dashed)
+    if not lab_forecast_chart.empty:
+        vol_col = "order_volume"
+        if not lab_actuals.empty:
+            connector = pd.DataFrame(
+                {"date": [lab_actuals["date"].iloc[-1]], vol_col: [lab_actuals["order_volume"].iloc[-1]]}
+            )
+            fc_plot = pd.concat([connector, lab_forecast_chart], ignore_index=True)
+        else:
+            fc_plot = lab_forecast_chart
+
+        label = f"Prognose (+{scenario_uplift}%)" if scenario_uplift > 0 else "Prognose"
+        fig.add_trace(
+            go.Scatter(
+                x=fc_plot["date"], y=fc_plot[vol_col], name=label,
+                line=dict(color="#f77f00", width=2.5, dash="dot"),
+                hovertemplate="%{x|%d %b}: %{y:,.0f} prognostiziert<extra></extra>",
+            ),
+            secondary_y=True,
+        )
+
+    # TODAY marker
+    today_str = today.strftime("%Y-%m-%d")
+    fig.add_shape(
+        type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper",
+        line=dict(color="rgba(239,68,68,0.5)", width=1.5, dash="dot"),
+    )
+    fig.add_annotation(
+        x=today_str, y=1.06, yref="paper", text="HEUTE", showarrow=False,
+        font=dict(size=9, color="#ef4444", family="Inter"),
+        bgcolor="rgba(239,68,68,0.1)", borderpad=3,
+        bordercolor="rgba(239,68,68,0.2)", borderwidth=1,
+    )
+
+    # Lag annotation
+    fig.add_annotation(
+        x=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"),
+        y=0.93, yref="paper", text="14-Tage Lag", showarrow=False,
+        font=dict(size=9, color="#64748b", family="Inter"),
+        bgcolor="rgba(15,20,35,0.85)", borderpad=4,
+        bordercolor="rgba(255,255,255,0.08)", borderwidth=1,
+    )
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(17,24,39,0.5)",
+        height=420,
+        margin=dict(l=0, r=0, t=35, b=0),
+        legend=dict(
+            orientation="h", y=1.12, x=0.5, xanchor="center",
+            font=dict(size=10, color="#94a3b8", family="Inter"),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12, font_family="Inter"),
+    )
+    fig.update_xaxes(gridcolor="rgba(255,255,255,0.03)", dtick="M1", tickformat="%b '%y", tickfont=dict(size=10, color="#64748b"))
+    fig.update_yaxes(title_text="Viruslast", secondary_y=False, showgrid=False, title_font=dict(color="#3b82f6", size=11), tickfont=dict(size=9, color="#64748b"))
+    fig.update_yaxes(title_text="Tests / Tag", secondary_y=True, gridcolor="rgba(255,255,255,0.04)", title_font=dict(color="#f77f00", size=11), tickfont=dict(size=9, color="#64748b"))
+
+    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+    st.plotly_chart(fig, use_container_width=True, key="correlation_chart")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Store fig for PDF export
+    correlation_fig_for_pdf = fig
+
+    # ── Section 3: Burndown + Table ──────────────────────────────────────────
+    col_left, col_right = st.columns([1, 1], gap="medium")
+
+    burndown_fig_for_pdf = None
+
+    with col_left:
+        st.markdown('<div class="section-header">Reagenz-Bestandsprognose</div>', unsafe_allow_html=True)
+
+        remaining = kpis.get("remaining_stock", [])
+        if remaining:
+            burndown_dates = forecast_df["Date"].values
+            fig_burn = go.Figure()
+
+            fig_burn.add_trace(
+                go.Scatter(
+                    x=burndown_dates, y=remaining, name="Restbestand",
+                    fill="tozeroy", line=dict(color="#22c55e", width=2),
+                    fillcolor="rgba(34,197,94,0.1)",
+                    hovertemplate="%{x|%d %b}: %{y:,.0f} Einheiten<extra></extra>",
+                )
+            )
+
+            cum_demand = np.cumsum(forecast_df["Predicted Volume"].values)
+            fig_burn.add_trace(
+                go.Scatter(
+                    x=burndown_dates, y=cum_demand, name="Kumulativer Bedarf",
+                    line=dict(color="#ef4444", width=1.5, dash="dot"),
+                    hovertemplate="%{x|%d %b}: %{y:,.0f} kumulativ<extra></extra>",
+                )
+            )
+
+            fig_burn.add_hline(
+                y=stock_on_hand, line_dash="longdash", line_color="rgba(148,163,184,0.3)",
+                annotation_text=f"Bestand: {stock_on_hand:,}", annotation_position="top left",
+                annotation_font_color="#64748b", annotation_font_size=10,
+            )
+
+            stockout_day = kpis.get("stockout_day")
+            if stockout_day is not None:
+                so_str = pd.Timestamp(stockout_day).strftime("%Y-%m-%d")
+                fig_burn.add_shape(
+                    type="line", x0=so_str, x1=so_str, y0=0, y1=1, yref="paper",
+                    line=dict(color="rgba(239,68,68,0.5)", width=1.5, dash="dash"),
+                )
+                fig_burn.add_annotation(
+                    x=so_str, y=1.06, yref="paper", text="STOCKOUT", showarrow=False,
+                    font=dict(size=9, color="#ef4444", family="Inter"),
+                    bgcolor="rgba(239,68,68,0.1)", borderpad=3,
+                    bordercolor="rgba(239,68,68,0.2)", borderwidth=1,
+                )
+
+            fig_burn.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(17,24,39,0.5)",
+                height=320, margin=dict(l=0, r=0, t=20, b=0),
+                legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center", font=dict(size=10, color="#94a3b8"), bgcolor="rgba(0,0,0,0)"),
+                hovermode="x unified",
+                hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12),
+                yaxis_title="Einheiten", yaxis_title_font=dict(size=11, color="#64748b"),
+            )
+            fig_burn.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
+            fig_burn.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
+
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            st.plotly_chart(fig_burn, use_container_width=True, key="burndown_chart")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            burndown_fig_for_pdf = fig_burn
+
+    with col_right:
+        st.markdown('<div class="section-header">Bestellempfehlungen</div>', unsafe_allow_html=True)
+
+        def highlight_orders(row):
+            if row["Reagent Order"] > 0:
+                return ["background-color: rgba(239,68,68,0.1); color: #fca5a5; font-weight: 600;"] * len(row)
+            return ["color: #94a3b8;"] * len(row)
+
+        styled = forecast_df.style.apply(highlight_orders, axis=1).format(
+            {
+                "Predicted Volume": "{:,.0f}",
+                "Reagent Order": "{:,.0f}",
+                rev_col_name: "EUR {:,.0f}",
+            }
+        )
+
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=380)
+
+    # ── Section 4: AI Insights ───────────────────────────────────────────────
+    st.markdown('<div class="section-header">KI-Analyse</div>', unsafe_allow_html=True)
+
+    ollama = get_ollama_client()
+    ollama_ok = ollama.health_check()
+
+    if ollama_ok:
+        with st.spinner("KI generiert Analyse …"):
+            ai_insight = ollama.generate_insight(kpis, selected_pathogen)
+    else:
+        ai_insight = ollama._fallback_insight(kpis, selected_pathogen)
+
+    ai_source = "Ollama" if ollama_ok else "Regelbasiert"
+    st.markdown(
+        f'<div class="alert-ai">'
+        f'<strong>KI-Einschaetzung</strong> <span style="opacity:0.5;">({ai_source})</span><br><br>'
+        f'{ai_insight}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── PDF Export ───────────────────────────────────────────────────────────
+    st.markdown("")
+    col_pdf, col_space = st.columns([1, 3])
+    with col_pdf:
+        if st.button("PDF-Bericht herunterladen", use_container_width=True, type="primary"):
+            with st.spinner("PDF wird generiert …"):
+                try:
+                    ai_commentary = ""
+                    if ollama_ok:
+                        ai_commentary = ollama.generate_pdf_commentary(kpis, selected_pathogen)
+                    else:
+                        ai_commentary = ai_insight
+
+                    pdf_bytes = generate_pdf_report(
+                        kpis=kpis,
+                        forecast_df=forecast_df,
+                        correlation_fig=correlation_fig_for_pdf,
+                        burndown_fig=burndown_fig_for_pdf,
+                        ai_commentary=ai_commentary,
+                        pathogen=selected_pathogen,
+                    )
+
+                    filename = f"LabPulse_{selected_pathogen}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+                    st.download_button(
+                        label="PDF herunterladen",
+                        data=pdf_bytes,
+                        file_name=filename,
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                except Exception as exc:
+                    st.error(f"PDF-Generierung fehlgeschlagen: {exc}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3: REGIONAL ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_regional:
+    st.markdown('<div class="section-header">Regionale Viruslast-Analyse</div>', unsafe_allow_html=True)
+
+    if raw_df.empty or "bundesland" not in raw_df.columns:
+        st.info("Keine regionalen Daten verfuegbar. RKI-Daten enthalten keine Bundesland-Spalte.")
+    else:
+        pathogen_types = PATHOGEN_GROUPS.get(selected_pathogen, [selected_pathogen])
+        regional_df = aggregate_by_bundesland(raw_df, pathogen_types, days_back=30)
+
+        if regional_df.empty:
+            st.info(f"Keine regionalen Daten fuer {selected_pathogen} in den letzten 30 Tagen.")
+        else:
+            # Scatter map (works without GeoJSON)
+            map_df = create_scatter_map_data(regional_df)
+
+            if not map_df.empty:
+                col_map, col_table = st.columns([2, 1], gap="medium")
+
+                with col_map:
+                    fig_map = px.scatter_mapbox(
+                        map_df,
+                        lat="lat",
+                        lon="lon",
+                        size="avg_virus_load",
+                        color="trend_pct",
+                        color_continuous_scale=["#22c55e", "#f77f00", "#ef4444"],
+                        hover_name="bundesland",
+                        hover_data={
+                            "avg_virus_load": ":.0f",
+                            "trend_pct": ":+.1f",
+                            "site_count": True,
+                            "lat": False,
+                            "lon": False,
+                        },
+                        size_max=40,
+                        zoom=5,
+                        center=GERMANY_CENTER,
+                        mapbox_style="carto-darkmatter",
+                    )
+                    fig_map.update_layout(
+                        height=500,
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        coloraxis_colorbar=dict(
+                            title="Trend %",
+                            tickfont=dict(color="#94a3b8"),
+                            titlefont=dict(color="#94a3b8"),
+                        ),
+                    )
+
+                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                    st.plotly_chart(fig_map, use_container_width=True, key="regional_map")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                with col_table:
+                    st.markdown(
+                        f'<div class="section-header">Top-Regionen ({selected_pathogen})</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    display_regional = regional_df[["bundesland", "avg_virus_load", "trend_pct", "site_count"]].copy()
+                    display_regional.columns = ["Bundesland", "Ø Viruslast", "Trend %", "Standorte"]
+                    display_regional["Ø Viruslast"] = display_regional["Ø Viruslast"].map(lambda x: f"{x:,.0f}")
+                    display_regional["Trend %"] = display_regional["Trend %"].map(lambda x: f"{x:+.1f}%")
+
+                    st.dataframe(
+                        display_regional,
+                        use_container_width=True,
+                        hide_index=True,
+                        height=450,
+                    )
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────
 cost = kpis.get("cost_per_test", AVG_REVENUE_PER_TEST)
+model_str = f" · ML: {ml_model_info['model_type']} ({ml_model_info['confidence_score']:.0f}%)" if ml_model_info else ""
 st.markdown(
     f"""
     <div class="footer-bar">
-        <span>LabPulse AI · {selected_pathogen} · {kpis.get('test_name', '')} · €{cost}/test</span>
-        <span>Data: <a href="https://github.com/robert-koch-institut/Abwassersurveillance_AMELAG" target="_blank">
+        <span>LabPulse AI v2.0 · {selected_pathogen} · {kpis.get('test_name', '')} · EUR {cost}/Test{model_str}</span>
+        <span>Daten: <a href="https://github.com/robert-koch-institut/Abwassersurveillance_AMELAG" target="_blank">
             RKI AMELAG
         </a> · {datetime.now().strftime('%Y-%m-%d %H:%M')}</span>
     </div>
