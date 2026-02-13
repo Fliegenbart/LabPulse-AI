@@ -53,6 +53,7 @@ from modules.external_data import (
     get_trends_limitations,
     PATHOGEN_SEARCH_TERMS,
 )
+from modules.signal_fusion import fuse_all_signals, SIGNAL_CONFIG
 
 # ── Page Config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -702,6 +703,95 @@ with tab_detail:
             delta_color="normal" if kpis["trend_pct"] >= 0 else "inverse",
         )
 
+    # ── Section 1b: Multi-Signal Confidence ─────────────────────────────────
+    st.markdown('<div class="section-header">Signal-Konfidenz</div>', unsafe_allow_html=True)
+    st.caption("Automatische Fusion aller Datenquellen — je mehr Signale uebereinstimmen, desto hoeher die Prognose-Konfidenz.")
+
+    # Fetch surveillance data for fusion
+    with st.spinner("Signale analysieren …"):
+        _gw_fusion = fetch_grippeweb(erkrankung="ARE", region="Bundesweit")
+        _are_fusion = fetch_are_konsultation(bundesland="Bundesweit")
+
+    composite = fuse_all_signals(
+        wastewater_df=wastewater_df,
+        grippeweb_df=_gw_fusion,
+        are_df=_are_fusion,
+        trends_df=None,  # trends loaded lazily in own tab
+    )
+
+    # Confidence bar + signal indicators
+    conf = composite.confidence_pct
+    if conf >= 70:
+        conf_color = "#22c55e"
+        conf_label_de = "HOCH"
+    elif conf >= 50:
+        conf_color = "#f77f00"
+        conf_label_de = "MITTEL"
+    else:
+        conf_color = "#ef4444"
+        conf_label_de = "NIEDRIG"
+
+    direction_icons = {"rising": "↑", "falling": "↓", "flat": "→", "mixed": "↔"}
+    direction_labels = {"rising": "steigend", "falling": "fallend", "flat": "stabil", "mixed": "uneinheitlich"}
+
+    # Main confidence display
+    conf_col1, conf_col2 = st.columns([1, 2], gap="medium")
+
+    with conf_col1:
+        st.markdown(
+            f'<div class="sparkline-card" style="text-align:center; padding:1.2rem;">'
+            f'<div style="font-size:2.2rem; font-weight:700; color:{conf_color};">{conf:.0f}%</div>'
+            f'<div style="font-size:0.75rem; font-weight:600; color:{conf_color}; margin:0.2rem 0;">'
+            f'Konfidenz: {conf_label_de}</div>'
+            f'<div style="font-size:0.7rem; color:var(--text-muted);">'
+            f'Richtung: {direction_icons.get(composite.direction, "?")} '
+            f'{direction_labels.get(composite.direction, composite.direction)} '
+            f'({composite.weighted_trend:+.1f}%)</div>'
+            f'<div style="font-size:0.65rem; color:var(--text-muted); margin-top:0.3rem;">'
+            f'Signal-Uebereinstimmung: {composite.agreement_pct:.0f}%</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with conf_col2:
+        # Per-signal status bars
+        signal_html = '<div class="sparkline-card" style="padding:1rem;">'
+        for sig in composite.signals:
+            cfg = SIGNAL_CONFIG.get(sig.name, {})
+            icon = cfg.get("icon", "")
+            label = cfg.get("label", sig.name)
+            color = cfg.get("color", "#94a3b8")
+
+            if not sig.available:
+                status_html = '<span style="color:#64748b;">nicht verfuegbar</span>'
+                bar_width = 0
+            else:
+                dir_icon = direction_icons.get(sig.direction, "?")
+                dir_label = direction_labels.get(sig.direction, sig.direction)
+                status_html = (
+                    f'<span style="color:{color};">{dir_icon} {dir_label} ({sig.magnitude:+.1f}%)</span>'
+                )
+                bar_width = min(100, max(5, abs(sig.magnitude) * 2))
+
+            signal_html += (
+                f'<div style="display:flex; align-items:center; gap:0.6rem; margin:0.4rem 0;">'
+                f'<span style="width:1.2rem; text-align:center;">{icon}</span>'
+                f'<span style="width:10rem; font-size:0.72rem; color:var(--text-muted);">{label}</span>'
+                f'<div style="flex:1; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden;">'
+                f'<div style="width:{bar_width}%; height:100%; background:{color}; border-radius:3px;"></div>'
+                f'</div>'
+                f'<span style="font-size:0.72rem; min-width:8rem;">{status_html}</span>'
+                f'</div>'
+            )
+        signal_html += '</div>'
+        st.markdown(signal_html, unsafe_allow_html=True)
+
+    # Narrative expander
+    with st.expander("Detailanalyse anzeigen", expanded=False):
+        for line in composite.narrative_de.split("\n"):
+            if line.strip():
+                st.caption(line)
+
     # ── Section 2: Correlation Chart ─────────────────────────────────────────
     st.markdown(
         f'<div class="section-header">{selected_pathogen} — Abwasser vs. Laborvolumen</div>',
@@ -1158,52 +1248,71 @@ with tab_regional:
                 col_map, col_table = st.columns([2, 1], gap="medium")
 
                 with col_map:
-                    fig_map = px.scatter_geo(
-                        map_df,
-                        lat="lat",
-                        lon="lon",
-                        size="avg_virus_load",
-                        color="trend_pct",
-                        color_continuous_scale=["#22c55e", "#f77f00", "#ef4444"],
-                        hover_name="bundesland",
-                        hover_data={
-                            "avg_virus_load": ":.0f",
-                            "trend_pct": ":+.1f",
-                            "site_count": True,
-                            "lat": False,
-                            "lon": False,
-                        },
-                        size_max=40,
-                        scope="europe",
-                        text="bundesland",
-                    )
-                    fig_map.update_geos(
-                        center=dict(lat=51.1657, lon=10.4515),
-                        projection_scale=8,
-                        showland=True,
-                        landcolor="#111827",
-                        showocean=True,
-                        oceancolor="#0b0e17",
-                        showcountries=True,
-                        countrycolor="rgba(255,255,255,0.1)",
-                        showlakes=False,
-                        bgcolor="rgba(0,0,0,0)",
-                    )
-                    fig_map.update_traces(
-                        textfont=dict(size=8, color="#94a3b8"),
-                        textposition="top center",
+                    # Bubble chart (offline — no external topojson needed)
+                    # Size = avg virus load, Color = trend %
+                    vl_min = map_df["avg_virus_load"].min()
+                    vl_max = map_df["avg_virus_load"].max()
+                    if vl_max > vl_min:
+                        map_df["bubble_size"] = 12 + (map_df["avg_virus_load"] - vl_min) / (vl_max - vl_min) * 40
+                    else:
+                        map_df["bubble_size"] = 25
+
+                    fig_map = go.Figure()
+                    fig_map.add_trace(
+                        go.Scatter(
+                            x=map_df["lon"],
+                            y=map_df["lat"],
+                            mode="markers+text",
+                            marker=dict(
+                                size=map_df["bubble_size"],
+                                color=map_df["trend_pct"],
+                                colorscale=[[0, "#22c55e"], [0.5, "#f77f00"], [1, "#ef4444"]],
+                                colorbar=dict(
+                                    title="Trend %",
+                                    tickfont=dict(color="#94a3b8"),
+                                    titlefont=dict(color="#94a3b8"),
+                                ),
+                                opacity=0.85,
+                                line=dict(width=1, color="rgba(255,255,255,0.15)"),
+                            ),
+                            text=map_df["bundesland"],
+                            textposition="top center",
+                            textfont=dict(size=9, color="#94a3b8"),
+                            hovertemplate=(
+                                "<b>%{text}</b><br>"
+                                "Ø Viruslast: %{customdata[0]:,.0f}<br>"
+                                "Trend: %{customdata[1]:+.1f}%<br>"
+                                "Standorte: %{customdata[2]}"
+                                "<extra></extra>"
+                            ),
+                            customdata=map_df[["avg_virus_load", "trend_pct", "site_count"]].values,
+                        )
                     )
                     fig_map.update_layout(
                         template="plotly_dark",
                         height=550,
-                        margin=dict(l=0, r=0, t=0, b=0),
+                        margin=dict(l=20, r=20, t=20, b=20),
                         paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        coloraxis_colorbar=dict(
-                            title="Trend %",
-                            tickfont=dict(color="#94a3b8"),
-                            titlefont=dict(color="#94a3b8"),
+                        plot_bgcolor="rgba(17,24,39,0.5)",
+                        xaxis=dict(
+                            title="Laengengrad",
+                            range=[5.5, 15.5],
+                            showgrid=True,
+                            gridcolor="rgba(255,255,255,0.04)",
+                            tickfont=dict(size=9, color="#64748b"),
+                            title_font=dict(size=10, color="#64748b"),
                         ),
+                        yaxis=dict(
+                            title="Breitengrad",
+                            range=[47.0, 55.5],
+                            showgrid=True,
+                            gridcolor="rgba(255,255,255,0.04)",
+                            scaleanchor="x",
+                            scaleratio=1.5,
+                            tickfont=dict(size=9, color="#64748b"),
+                            title_font=dict(size=10, color="#64748b"),
+                        ),
+                        showlegend=False,
                     )
 
                     st.markdown('<div class="chart-container">', unsafe_allow_html=True)

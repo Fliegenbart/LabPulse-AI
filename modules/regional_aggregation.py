@@ -15,25 +15,31 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Bundesland name mapping (RKI data uses various spellings)
+# Bundesland abbreviation → full name (RKI AMELAG uses 2-letter codes)
+BUNDESLAND_CODES = {
+    "BW": "Baden-Württemberg",
+    "BY": "Bayern",
+    "BE": "Berlin",
+    "BB": "Brandenburg",
+    "HB": "Bremen",
+    "HH": "Hamburg",
+    "HE": "Hessen",
+    "MV": "Mecklenburg-Vorpommern",
+    "NI": "Niedersachsen",
+    "NW": "Nordrhein-Westfalen",
+    "RP": "Rheinland-Pfalz",
+    "SL": "Saarland",
+    "SN": "Sachsen",
+    "ST": "Sachsen-Anhalt",
+    "SH": "Schleswig-Holstein",
+    "TH": "Thüringen",
+}
+
+# Also accept full names (identity mapping + common variants)
 BUNDESLAND_NORMALIZE = {
-    "Baden-Württemberg": "Baden-Württemberg",
+    **{v: v for v in BUNDESLAND_CODES.values()},
+    **{k: v for k, v in BUNDESLAND_CODES.items()},
     "Baden-Wuerttemberg": "Baden-Württemberg",
-    "Bayern": "Bayern",
-    "Berlin": "Berlin",
-    "Brandenburg": "Brandenburg",
-    "Bremen": "Bremen",
-    "Hamburg": "Hamburg",
-    "Hessen": "Hessen",
-    "Mecklenburg-Vorpommern": "Mecklenburg-Vorpommern",
-    "Niedersachsen": "Niedersachsen",
-    "Nordrhein-Westfalen": "Nordrhein-Westfalen",
-    "Rheinland-Pfalz": "Rheinland-Pfalz",
-    "Saarland": "Saarland",
-    "Sachsen": "Sachsen",
-    "Sachsen-Anhalt": "Sachsen-Anhalt",
-    "Schleswig-Holstein": "Schleswig-Holstein",
-    "Thüringen": "Thüringen",
     "Thueringen": "Thüringen",
 }
 
