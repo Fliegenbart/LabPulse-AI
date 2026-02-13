@@ -19,10 +19,10 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Darker+Grotesque:wght@300;400;500;600;700;900&family=Azeret+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg-void: #131319;
-    --bg-deep: #17171f;
-    --bg-surface: #1b1b27;
-    --bg-card: #222234;
+    --bg-void: #1a1a24;
+    --bg-deep: #1f1f2b;
+    --bg-surface: #242436;
+    --bg-card: #2c2c42;
     --accent: #d4956a;
     --accent-bright: #e8b08a;
     --accent-dim: rgba(212,149,106,0.08);
@@ -35,7 +35,7 @@ st.markdown("""
     --text-primary: #d4cfc8;
     --text-secondary: #8a857e;
     --text-muted: #524e48;
-    --border: rgba(212,149,106,0.06);
+    --border: rgba(212,149,106,0.10);
     --border-hover: rgba(212,149,106,0.18);
     --font-display: 'Darker Grotesque', sans-serif;
     --font-body: 'Bricolage Grotesque', sans-serif;
