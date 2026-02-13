@@ -68,68 +68,116 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
     :root {
-        --bg-primary: #0b0e17;
-        --bg-card: #111827;
-        --border-subtle: rgba(255,255,255,0.06);
-        --text-primary: #f1f5f9;
+        --bg-primary: #0c1222;
+        --bg-surface: #162032;
+        --bg-card: #1a2538;
+        --border-subtle: rgba(34,211,238,0.08);
+        --border-hover: rgba(34,211,238,0.25);
+        --text-primary: #e2e8f0;
         --text-secondary: #94a3b8;
         --text-muted: #64748b;
-        --accent-orange: #f77f00;
-        --accent-blue: #3b82f6;
-        --accent-green: #22c55e;
-        --accent-red: #ef4444;
-        --radius: 16px;
-        --radius-sm: 10px;
+        --accent-cyan: #22d3ee;
+        --accent-amber: #fbbf24;
+        --accent-blue: #38bdf8;
+        --accent-green: #34d399;
+        --accent-red: #fb7185;
+        --accent-purple: #c084fc;
+        --radius: 14px;
+        --radius-sm: 8px;
+        --font-display: 'Sora', sans-serif;
+        --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    /* ── Global App Background: layered atmosphere ── */
+    .stApp {
+        background:
+            radial-gradient(ellipse at 18% 45%, rgba(34,211,238,0.05) 0%, transparent 55%),
+            radial-gradient(ellipse at 85% 25%, rgba(251,191,36,0.03) 0%, transparent 50%),
+            radial-gradient(ellipse at 50% 95%, rgba(192,132,252,0.03) 0%, transparent 40%),
+            linear-gradient(180deg, #0c1222 0%, #0f172a 50%, #0c1222 100%);
+    }
+    /* Subtle dot-grid pattern for depth */
+    .stApp::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background-image:
+            radial-gradient(rgba(34,211,238,0.04) 1px, transparent 1px);
+        background-size: 32px 32px;
+        pointer-events: none;
+        z-index: 0;
     }
 
     .block-container {
         padding: 2rem 2.5rem 1rem 2.5rem;
-        max-width: 1400px;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        max-width: 1440px;
+        font-family: var(--font-display);
     }
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: var(--font-display);
     }
 
+    /* ── Staggered load animation ── */
+    @keyframes fadeSlideUp {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes glowPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0); }
+        50% { box-shadow: 0 0 20px 2px rgba(34,211,238,0.08); }
+    }
+
+    /* ── Metric Cards ── */
     div[data-testid="stMetric"] {
-        background: var(--bg-card);
+        background: linear-gradient(145deg, var(--bg-card), rgba(22,32,50,0.8));
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius);
         padding: 1.25rem 1.4rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.15);
-        transition: border-color 0.2s ease, transform 0.15s ease;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.03);
+        transition: border-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+        animation: fadeSlideUp 0.5s ease-out both;
     }
+    div[data-testid="stMetric"]:nth-child(1) { animation-delay: 0.05s; }
+    div[data-testid="stMetric"]:nth-child(2) { animation-delay: 0.10s; }
+    div[data-testid="stMetric"]:nth-child(3) { animation-delay: 0.15s; }
+    div[data-testid="stMetric"]:nth-child(4) { animation-delay: 0.20s; }
     div[data-testid="stMetric"]:hover {
-        border-color: rgba(247, 127, 0, 0.3);
-        transform: translateY(-1px);
+        border-color: var(--border-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(34,211,238,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
     }
     div[data-testid="stMetric"] label {
         color: var(--text-muted) !important;
-        font-size: 0.7rem !important;
+        font-family: var(--font-display) !important;
+        font-size: 0.68rem !important;
         font-weight: 600 !important;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
     }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
         color: var(--text-primary) !important;
-        font-size: 1.5rem !important;
+        font-family: var(--font-mono) !important;
+        font-size: 1.45rem !important;
         font-weight: 700;
         letter-spacing: -0.02em;
     }
     div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
-        font-size: 0.75rem !important;
+        font-family: var(--font-mono) !important;
+        font-size: 0.72rem !important;
     }
 
+    /* ── Section Headers ── */
     .section-header {
         color: var(--text-primary);
-        font-size: 0.85rem;
+        font-family: var(--font-display);
+        font-size: 0.82rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.1em;
-        padding-bottom: 0.6rem;
+        letter-spacing: 0.12em;
+        padding-bottom: 0.7rem;
         margin: 2.5rem 0 1.2rem 0;
         border-bottom: none;
         position: relative;
@@ -138,70 +186,82 @@ st.markdown(
         content: '';
         position: absolute;
         bottom: 0; left: 0;
-        width: 40px; height: 3px;
-        background: var(--accent-orange);
-        border-radius: 2px;
+        width: 36px; height: 2px;
+        background: linear-gradient(90deg, var(--accent-cyan), transparent);
+        border-radius: 1px;
     }
 
+    /* ── Sidebar ── */
     [data-testid="stSidebar"] {
-        background: #0f1219;
-        border-right: 1px solid var(--border-subtle);
+        background: linear-gradient(180deg, #0e1628 0%, #0c1222 100%);
+        border-right: 1px solid rgba(34,211,238,0.06);
     }
     [data-testid="stSidebar"] .stMarkdown h1 {
-        color: var(--text-primary);
-        font-size: 1.15rem;
+        color: var(--accent-cyan);
+        font-family: var(--font-display);
+        font-size: 1.1rem;
         font-weight: 700;
     }
 
     .sidebar-label {
         color: var(--text-muted);
-        font-size: 0.65rem;
+        font-family: var(--font-display);
+        font-size: 0.62rem;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.14em;
         margin-bottom: 0.6rem;
     }
 
+    /* ── Alert Banners ── */
     .alert-critical {
-        background: linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(239,68,68,0.06) 100%);
-        border: 1px solid rgba(239,68,68,0.25);
-        border-left: 4px solid var(--accent-red);
+        background: linear-gradient(135deg, rgba(251,113,133,0.1) 0%, rgba(251,113,133,0.03) 100%);
+        border: 1px solid rgba(251,113,133,0.2);
+        border-left: 3px solid var(--accent-red);
         border-radius: var(--radius-sm);
         padding: 1rem 1.25rem;
         margin: 0.75rem 0 1.5rem 0;
-        color: #fca5a5;
-        font-size: 0.88rem;
+        color: #fda4af;
+        font-size: 0.85rem;
         line-height: 1.6;
+        animation: fadeSlideUp 0.4s ease-out both;
     }
     .alert-info {
-        background: linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0.04) 100%);
-        border: 1px solid rgba(59,130,246,0.2);
-        border-left: 4px solid var(--accent-blue);
+        background: linear-gradient(135deg, rgba(56,189,248,0.08) 0%, rgba(56,189,248,0.02) 100%);
+        border: 1px solid rgba(56,189,248,0.15);
+        border-left: 3px solid var(--accent-blue);
         border-radius: var(--radius-sm);
         padding: 1rem 1.25rem;
         margin: 0.75rem 0 1.5rem 0;
-        color: #93c5fd;
-        font-size: 0.88rem;
+        color: #7dd3fc;
+        font-size: 0.85rem;
         line-height: 1.6;
+        animation: fadeSlideUp 0.4s ease-out both;
     }
     .alert-ai {
-        background: linear-gradient(135deg, rgba(168,85,247,0.1) 0%, rgba(168,85,247,0.04) 100%);
-        border: 1px solid rgba(168,85,247,0.2);
-        border-left: 4px solid #a855f7;
+        background: linear-gradient(135deg, rgba(192,132,252,0.08) 0%, rgba(192,132,252,0.02) 100%);
+        border: 1px solid rgba(192,132,252,0.15);
+        border-left: 3px solid var(--accent-purple);
         border-radius: var(--radius-sm);
         padding: 1rem 1.25rem;
         margin: 0.75rem 0 1.5rem 0;
         color: #d8b4fe;
-        font-size: 0.88rem;
+        font-size: 0.85rem;
         line-height: 1.6;
+        animation: fadeSlideUp 0.4s ease-out both;
     }
 
+    /* ── Chart Container ── */
     .chart-container {
-        background: var(--bg-card);
+        background: linear-gradient(160deg, var(--bg-card), rgba(12,18,34,0.7));
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius);
         padding: 0.5rem;
         margin-bottom: 0.5rem;
+        transition: border-color 0.3s ease;
+    }
+    .chart-container:hover {
+        border-color: rgba(34,211,238,0.15);
     }
 
     [data-testid="stDataFrame"] > div {
@@ -209,6 +269,26 @@ st.markdown(
         border: 1px solid var(--border-subtle);
     }
 
+    /* ── Tabs ── */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-family: var(--font-display);
+        font-size: 0.8rem;
+        font-weight: 500;
+        padding: 0.75rem 1.2rem;
+        color: var(--text-muted);
+        border-bottom: 2px solid transparent;
+        transition: all 0.25s ease;
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--accent-cyan) !important;
+        border-bottom-color: var(--accent-cyan) !important;
+    }
+
+    /* ── Footer ── */
     .footer-bar {
         display: flex;
         justify-content: space-between;
@@ -217,84 +297,117 @@ st.markdown(
         border-top: 1px solid var(--border-subtle);
         margin-top: 2rem;
         color: var(--text-muted);
-        font-size: 0.72rem;
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
     }
-    .footer-bar a { color: var(--accent-orange); text-decoration: none; }
+    .footer-bar a { color: var(--accent-cyan); text-decoration: none; }
+    .footer-bar a:hover { text-decoration: underline; }
 
+    /* ── App Header ── */
     .app-header {
         display: flex;
         align-items: center;
         gap: 1rem;
         padding-bottom: 0.5rem;
+        animation: fadeSlideUp 0.4s ease-out both;
     }
     .app-header-icon {
         width: 44px; height: 44px;
-        background: linear-gradient(135deg, var(--accent-orange), #e06c00);
+        background: linear-gradient(135deg, var(--accent-cyan), #0891b2);
         border-radius: 12px;
         display: flex; align-items: center; justify-content: center;
         font-size: 1.4rem; flex-shrink: 0;
+        box-shadow: 0 4px 14px rgba(34,211,238,0.2);
     }
     .app-header-text h1 {
-        margin: 0; font-size: 1.35rem; font-weight: 700;
+        margin: 0; font-size: 1.3rem; font-weight: 700;
+        font-family: var(--font-display);
         color: var(--text-primary); letter-spacing: -0.02em; line-height: 1.2;
     }
     .app-header-text p {
-        margin: 0; font-size: 0.82rem; color: var(--text-muted);
+        margin: 0; font-size: 0.8rem; color: var(--text-muted);
+        font-family: var(--font-display);
     }
 
     .sidebar-pill {
         display: inline-block;
-        background: rgba(247,127,0,0.12);
-        color: var(--accent-orange);
-        font-size: 0.65rem; font-weight: 600;
+        background: rgba(34,211,238,0.12);
+        color: var(--accent-cyan);
+        font-family: var(--font-mono);
+        font-size: 0.62rem; font-weight: 600;
         padding: 0.2rem 0.6rem; border-radius: 99px;
         letter-spacing: 0.04em; margin-left: 0.4rem;
     }
 
+    /* ── Sparkline Cards ── */
     .sparkline-card {
-        background: var(--bg-card);
+        background: linear-gradient(145deg, var(--bg-card), rgba(22,32,50,0.6));
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius);
         padding: 1rem 1.2rem;
-        transition: border-color 0.2s ease, transform 0.15s ease;
+        transition: border-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
         cursor: pointer;
     }
     .sparkline-card:hover {
-        border-color: rgba(247, 127, 0, 0.3);
+        border-color: var(--border-hover);
         transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(34,211,238,0.08);
     }
     .sparkline-title {
         color: var(--text-muted);
-        font-size: 0.7rem; font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.08em;
+        font-family: var(--font-display);
+        font-size: 0.68rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.1em;
     }
     .sparkline-value {
         color: var(--text-primary);
-        font-size: 1.3rem; font-weight: 700;
+        font-family: var(--font-mono);
+        font-size: 1.25rem; font-weight: 700;
         margin: 0.3rem 0;
     }
-    .sparkline-trend-up { color: var(--accent-red); font-size: 0.8rem; }
-    .sparkline-trend-down { color: var(--accent-green); font-size: 0.8rem; }
-    .sparkline-trend-flat { color: var(--text-muted); font-size: 0.8rem; }
+    .sparkline-trend-up { color: var(--accent-red); font-family: var(--font-mono); font-size: 0.78rem; }
+    .sparkline-trend-down { color: var(--accent-green); font-family: var(--font-mono); font-size: 0.78rem; }
+    .sparkline-trend-flat { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem; }
 
+    /* ── Badges ── */
     .confidence-badge {
         display: inline-block;
-        padding: 0.15rem 0.5rem;
+        padding: 0.15rem 0.55rem;
         border-radius: 99px;
-        font-size: 0.65rem;
+        font-family: var(--font-mono);
+        font-size: 0.62rem;
         font-weight: 600;
     }
-    .confidence-high { background: rgba(34,197,94,0.15); color: #22c55e; }
-    .confidence-medium { background: rgba(247,127,0,0.15); color: #f77f00; }
-    .confidence-low { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .confidence-high { background: rgba(52,211,153,0.12); color: var(--accent-green); }
+    .confidence-medium { background: rgba(251,191,36,0.12); color: var(--accent-amber); }
+    .confidence-low { background: rgba(251,113,133,0.12); color: var(--accent-red); }
 
     .data-quality {
         display: flex; gap: 0.5rem; align-items: center;
-        padding: 0.4rem 0; font-size: 0.75rem;
+        padding: 0.4rem 0;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
     }
     .dq-real { color: var(--accent-green); }
     .dq-synthetic { color: var(--text-muted); }
 
+    /* ── Buttons ── */
+    .stButton > button {
+        font-family: var(--font-display);
+        font-weight: 600;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-card);
+        color: var(--text-primary);
+        transition: all 0.25s ease;
+    }
+    .stButton > button:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(34,211,238,0.12);
+    }
+
+    /* ── Hide Chrome ── */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header[data-testid="stHeader"] { background: transparent; }
@@ -556,7 +669,7 @@ with signal_col:
         conf_color = "#22c55e"
         conf_label_de = "HOCH"
     elif conf >= 50:
-        conf_color = "#f77f00"
+        conf_color = "#fbbf24"
         conf_label_de = "MITTEL"
     else:
         conf_color = "#ef4444"
@@ -628,8 +741,8 @@ fig.add_trace(
     go.Scatter(
         x=ww_chart["date"], y=ww_chart["virus_load"],
         name="Viruslast (taeglich)", showlegend=False,
-        line=dict(color="#3b82f6", width=0.5), opacity=0.15,
-        fill="tozeroy", fillcolor="rgba(59,130,246,0.03)",
+        line=dict(color="#22d3ee", width=0.5), opacity=0.12,
+        fill="tozeroy", fillcolor="rgba(34,211,238,0.02)",
         hovertemplate="%{x|%d %b}: %{y:,.0f} Kopien/L<extra></extra>",
     ),
     secondary_y=False,
@@ -642,7 +755,7 @@ fig.add_trace(
     go.Scatter(
         x=ww_smoothed["date"], y=ww_smoothed["vl_7d"],
         name="Viruslast (7d Ø)",
-        line=dict(color="#3b82f6", width=2),
+        line=dict(color="#22d3ee", width=2),
         hovertemplate="%{x|%d %b}: %{y:,.0f} Ø Kopien/L<extra></extra>",
     ),
     secondary_y=False,
@@ -653,7 +766,7 @@ fig.add_trace(
     go.Scatter(
         x=lab_actuals["date"], y=lab_actuals["order_volume"],
         name="Labortests (taeglich)", showlegend=False,
-        line=dict(color="#f77f00", width=1), opacity=0.2,
+        line=dict(color="#fbbf24", width=1), opacity=0.18,
         hovertemplate="%{x|%d %b}: %{y:,.0f} Tests<extra></extra>",
     ),
     secondary_y=True,
@@ -666,7 +779,7 @@ fig.add_trace(
     go.Scatter(
         x=lab_smoothed["date"], y=lab_smoothed["vol_7d"],
         name="Labortests (7d Ø)",
-        line=dict(color="#f77f00", width=2.5),
+        line=dict(color="#fbbf24", width=2.5),
         hovertemplate="%{x|%d %b}: %{y:,.0f} Ø/Tag<extra></extra>",
     ),
     secondary_y=True,
@@ -683,16 +796,16 @@ if use_ml and ml_model_info and "ml_forecast" in dir():
         ), secondary_y=True)
         fig.add_trace(go.Scatter(
             x=ml_fc["date"], y=ml_fc["lower"], name="ML-Konfidenzband",
-            fill="tonexty", fillcolor="rgba(168,85,247,0.18)",
-            line=dict(width=0.8, color="rgba(168,85,247,0.3)", dash="dot"), mode="lines",
+            fill="tonexty", fillcolor="rgba(192,132,252,0.14)",
+            line=dict(width=0.8, color="rgba(192,132,252,0.3)", dash="dot"), mode="lines",
             hovertemplate="Konfidenzband: %{y:,.0f}<extra></extra>",
         ), secondary_y=True)
         # Main ML line (thicker, with markers at key points)
         fig.add_trace(go.Scatter(
             x=ml_fc["date"], y=ml_fc["predicted"], name="ML-Prognose",
-            line=dict(color="#a855f7", width=3, dash="dash"),
+            line=dict(color="#c084fc", width=3, dash="dash"),
             mode="lines+markers",
-            marker=dict(size=4, color="#a855f7", symbol="diamond",
+            marker=dict(size=4, color="#c084fc", symbol="diamond",
                         line=dict(width=1, color="white")),
             hovertemplate=(
                 "<b>ML-Prognose</b><br>"
@@ -707,7 +820,7 @@ if use_ml and ml_model_info and "ml_forecast" in dir():
         fig.add_trace(go.Scatter(
             x=[ml_fc["date"].iloc[0]], y=[ml_fc["predicted"].iloc[0]],
             mode="markers", name="ML Start", showlegend=False,
-            marker=dict(size=10, color="#a855f7", symbol="star",
+            marker=dict(size=10, color="#c084fc", symbol="star",
                         line=dict(width=2, color="white")),
             hovertemplate="<b>ML-Prognose Start</b><br>%{x|%d %b %Y}<extra></extra>",
         ), secondary_y=True)
@@ -723,38 +836,38 @@ if not lab_forecast_chart.empty:
     else:
         fc_plot = lab_forecast_chart
     label = f"Prognose (+{scenario_uplift}%)" if scenario_uplift > 0 else "Prognose"
-    fig.add_trace(go.Scatter(x=fc_plot["date"], y=fc_plot[vol_col], name=label, line=dict(color="#f77f00", width=2.5, dash="dot"), hovertemplate="%{x|%d %b}: %{y:,.0f} prognostiziert<extra></extra>"), secondary_y=True)
+    fig.add_trace(go.Scatter(x=fc_plot["date"], y=fc_plot[vol_col], name=label, line=dict(color="#fbbf24", width=2.5, dash="dot"), hovertemplate="%{x|%d %b}: %{y:,.0f} prognostiziert<extra></extra>"), secondary_y=True)
 
 # Forecast shading zone (light purple background behind forecast area)
 _fc_end = today + pd.Timedelta(days=forecast_horizon)
 fig.add_vrect(
     x0=today_str, x1=_fc_end.strftime("%Y-%m-%d"),
-    fillcolor="rgba(168,85,247,0.04)", layer="below", line_width=0,
+    fillcolor="rgba(192,132,252,0.04)", layer="below", line_width=0,
 )
 fig.add_annotation(
     x=_fc_end.strftime("%Y-%m-%d"), y=0.97, yref="paper",
     text=f"Prognose-Fenster ({forecast_horizon}d) →",
-    showarrow=False, font=dict(size=9, color="#a855f7", family="Inter"),
-    bgcolor="rgba(168,85,247,0.12)", borderpad=4,
-    bordercolor="rgba(168,85,247,0.25)", borderwidth=1,
+    showarrow=False, font=dict(size=9, color="#c084fc", family="Sora"),
+    bgcolor="rgba(192,132,252,0.12)", borderpad=4,
+    bordercolor="rgba(192,132,252,0.25)", borderwidth=1,
     xanchor="right",
 )
 
 # TODAY marker
 fig.add_shape(type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper", line=dict(color="rgba(239,68,68,0.5)", width=1.5, dash="dot"))
-fig.add_annotation(x=today_str, y=1.06, yref="paper", text="HEUTE", showarrow=False, font=dict(size=9, color="#ef4444", family="Inter"), bgcolor="rgba(239,68,68,0.1)", borderpad=3, bordercolor="rgba(239,68,68,0.2)", borderwidth=1)
-fig.add_annotation(x=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), y=0.93, yref="paper", text="14-Tage Lag", showarrow=False, font=dict(size=9, color="#64748b", family="Inter"), bgcolor="rgba(15,20,35,0.85)", borderpad=4, bordercolor="rgba(255,255,255,0.08)", borderwidth=1)
+fig.add_annotation(x=today_str, y=1.06, yref="paper", text="HEUTE", showarrow=False, font=dict(size=9, color="#ef4444", family="Sora"), bgcolor="rgba(239,68,68,0.1)", borderpad=3, bordercolor="rgba(239,68,68,0.2)", borderwidth=1)
+fig.add_annotation(x=(today - pd.Timedelta(days=7)).strftime("%Y-%m-%d"), y=0.93, yref="paper", text="14-Tage Lag", showarrow=False, font=dict(size=9, color="#64748b", family="Sora"), bgcolor="rgba(15,20,35,0.85)", borderpad=4, bordercolor="rgba(255,255,255,0.08)", borderwidth=1)
 
 fig.update_layout(
-    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(17,24,39,0.5)",
+    template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(12,18,34,0.4)",
     height=480, margin=dict(l=0, r=0, t=50, b=10),
-    legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(size=10, color="#94a3b8", family="Inter"), bgcolor="rgba(0,0,0,0)"),
-    hovermode="x unified", hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12, font_family="Inter"),
+    legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(size=10, color="#94a3b8", family="Sora"), bgcolor="rgba(0,0,0,0)"),
+    hovermode="x unified", hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12, font_family="Sora"),
 )
 fig.update_xaxes(
     gridcolor="rgba(255,255,255,0.03)", dtick="M1", tickformat="%b '%y",
     tickfont=dict(size=10, color="#64748b"),
-    rangeslider=dict(visible=True, thickness=0.04, bgcolor="rgba(30,41,59,0.5)",
+    rangeslider=dict(visible=True, thickness=0.04, bgcolor="rgba(22,32,50,0.5)",
                      bordercolor="rgba(255,255,255,0.08)", borderwidth=1),
     rangeselector=dict(
         buttons=[
@@ -763,14 +876,14 @@ fig.update_xaxes(
             dict(count=forecast_horizon, label="Prognose", step="day", stepmode="todate"),
             dict(step="all", label="Alles"),
         ],
-        bgcolor="rgba(30,41,59,0.9)", activecolor="#a855f7",
+        bgcolor="rgba(22,32,50,0.9)", activecolor="#22d3ee",
         bordercolor="rgba(255,255,255,0.1)", borderwidth=1,
-        font=dict(size=10, color="#e2e8f0", family="Inter"),
+        font=dict(size=10, color="#e2e8f0", family="Sora"),
         x=0, y=1.18,
     ),
 )
-fig.update_yaxes(title_text="Viruslast", secondary_y=False, showgrid=False, title_font=dict(color="#3b82f6", size=11), tickfont=dict(size=9, color="#64748b"))
-fig.update_yaxes(title_text="Tests / Tag", secondary_y=True, gridcolor="rgba(255,255,255,0.04)", title_font=dict(color="#f77f00", size=11), tickfont=dict(size=9, color="#64748b"))
+fig.update_yaxes(title_text="Viruslast", secondary_y=False, showgrid=False, title_font=dict(color="#22d3ee", size=11), tickfont=dict(size=9, color="#64748b"))
+fig.update_yaxes(title_text="Tests / Tag", secondary_y=True, gridcolor="rgba(255,255,255,0.04)", title_font=dict(color="#fbbf24", size=11), tickfont=dict(size=9, color="#64748b"))
 
 st.markdown('<div class="chart-container">', unsafe_allow_html=True)
 st.plotly_chart(fig, use_container_width=True, key="correlation_chart", config={
@@ -795,7 +908,7 @@ _legend_html = " &nbsp;|&nbsp; ".join(
     f"<span style='color:#94a3b8;font-size:0.78rem;'>{icon} <b>{label}</b> — {desc}</span>"
     for icon, label, desc in _legend_items
 )
-st.markdown(f"<div style='padding:6px 12px;background:rgba(15,23,42,0.5);border-radius:8px;margin-top:-8px;'>{_legend_html}</div>", unsafe_allow_html=True)
+st.markdown(f"<div style='padding:6px 12px;background:rgba(22,32,50,0.6);border-radius:8px;margin-top:-8px;'>{_legend_html}</div>", unsafe_allow_html=True)
 st.caption("💡 Nutze die Buttons **1M / 3M / Prognose / Alles** oder den Schieberegler unten im Chart zum Zoomen. Mausrad = Scroll-Zoom.")
 
 
@@ -871,7 +984,7 @@ with tab_forecast:
                 )
                 fig_burn.add_annotation(
                     x=so_str, y=1.06, yref="paper", text="STOCKOUT", showarrow=False,
-                    font=dict(size=9, color="#ef4444", family="Inter"),
+                    font=dict(size=9, color="#ef4444", family="Sora"),
                     bgcolor="rgba(239,68,68,0.1)", borderpad=3,
                     bordercolor="rgba(239,68,68,0.2)", borderwidth=1,
                 )
@@ -879,11 +992,11 @@ with tab_forecast:
             fig_burn.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(17,24,39,0.5)",
+                plot_bgcolor="rgba(12,18,34,0.4)",
                 height=320, margin=dict(l=0, r=0, t=20, b=0),
                 legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center", font=dict(size=10, color="#94a3b8"), bgcolor="rgba(0,0,0,0)"),
                 hovermode="x unified",
-                hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12),
+                hoverlabel=dict(bgcolor="#1a2538", bordercolor="rgba(34,211,238,0.2)", font_size=12),
                 yaxis_title="Einheiten", yaxis_title_font=dict(size=11, color="#64748b"),
             )
             fig_burn.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
@@ -991,7 +1104,7 @@ with tab_inventory:
             if days_coverage >= 14:
                 stock_color, stock_label = "#22c55e", f"{days_coverage}d Reichweite"
             elif days_coverage >= 7:
-                stock_color, stock_label = "#f77f00", f"{days_coverage}d Reichweite"
+                stock_color, stock_label = "#fbbf24", f"{days_coverage}d Reichweite"
             else:
                 stock_color, stock_label = "#ef4444", f"KRITISCH — {days_coverage}d"
 
@@ -1032,7 +1145,7 @@ with tab_inventory:
                 )
                 recent = lab.tail(14)
                 if not recent.empty:
-                    fig_spark = go.Figure(go.Scatter(x=recent["date"], y=recent["order_volume"], mode="lines", line=dict(color="#f77f00", width=2), fill="tozeroy", fillcolor="rgba(247,127,0,0.08)"))
+                    fig_spark = go.Figure(go.Scatter(x=recent["date"], y=recent["order_volume"], mode="lines", line=dict(color="#fbbf24", width=2), fill="tozeroy", fillcolor="rgba(251,191,36,0.06)"))
                     fig_spark.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", height=80, margin=dict(l=0, r=0, t=0, b=0), xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False)
                     st.plotly_chart(fig_spark, use_container_width=True)
             except Exception as exc:
@@ -1053,9 +1166,9 @@ with tab_surveillance:
         if not gw_df.empty:
             gw_recent = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
             fig_gw = go.Figure()
-            fig_gw.add_trace(go.Scatter(x=gw_recent["date"], y=gw_recent["incidence"], name=f"GrippeWeb {gw_type}", fill="tozeroy", line=dict(color="#8b5cf6", width=2), fillcolor="rgba(139,92,246,0.08)", hovertemplate="%{x|%d %b %Y}: %{y:,.1f} / 100.000<extra></extra>"))
+            fig_gw.add_trace(go.Scatter(x=gw_recent["date"], y=gw_recent["incidence"], name=f"GrippeWeb {gw_type}", fill="tozeroy", line=dict(color="#c084fc", width=2), fillcolor="rgba(192,132,252,0.06)", hovertemplate="%{x|%d %b %Y}: %{y:,.1f} / 100.000<extra></extra>"))
             fig_gw.add_shape(type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper", line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"))
-            fig_gw.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(17,24,39,0.5)", height=280, margin=dict(l=0, r=0, t=5, b=0), yaxis_title="Inzidenz / 100.000", yaxis_title_font=dict(size=10, color="#64748b"), showlegend=False, hovermode="x unified")
+            fig_gw.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(12,18,34,0.4)", height=280, margin=dict(l=0, r=0, t=5, b=0), yaxis_title="Inzidenz / 100.000", yaxis_title_font=dict(size=10, color="#64748b"), showlegend=False, hovermode="x unified")
             fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
             fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
@@ -1077,7 +1190,7 @@ with tab_surveillance:
             fig_are = go.Figure()
             fig_are.add_trace(go.Scatter(x=are_recent["date"], y=are_recent["consultation_incidence"], name="ARE Konsultationen", fill="tozeroy", line=dict(color="#06b6d4", width=2), fillcolor="rgba(6,182,212,0.08)", hovertemplate="%{x|%d %b %Y}: %{y:,.0f} / 100.000<extra></extra>"))
             fig_are.add_shape(type="line", x0=today_str, x1=today_str, y0=0, y1=1, yref="paper", line=dict(color="rgba(239,68,68,0.4)", width=1, dash="dot"))
-            fig_are.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(17,24,39,0.5)", height=280, margin=dict(l=0, r=0, t=5, b=0), yaxis_title="Konsultationen / 100.000", yaxis_title_font=dict(size=10, color="#64748b"), showlegend=False, hovermode="x unified")
+            fig_are.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(12,18,34,0.4)", height=280, margin=dict(l=0, r=0, t=5, b=0), yaxis_title="Konsultationen / 100.000", yaxis_title_font=dict(size=10, color="#64748b"), showlegend=False, hovermode="x unified")
             fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
             fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
@@ -1135,7 +1248,7 @@ with tab_regional:
                             marker=dict(
                                 size=map_df["bubble_size"],
                                 color=map_df["trend_pct"],
-                                colorscale=[[0, "#22c55e"], [0.5, "#f77f00"], [1, "#ef4444"]],
+                                colorscale=[[0, "#22c55e"], [0.5, "#fbbf24"], [1, "#ef4444"]],
                                 colorbar=dict(
                                     title=dict(text="Trend %", font=dict(color="#94a3b8")),
                                     tickfont=dict(color="#94a3b8"),
@@ -1161,7 +1274,7 @@ with tab_regional:
                         height=550,
                         margin=dict(l=20, r=20, t=20, b=20),
                         paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(17,24,39,0.5)",
+                        plot_bgcolor="rgba(12,18,34,0.4)",
                         xaxis=dict(
                             title="Laengengrad",
                             range=[5.5, 15.5],
@@ -1298,7 +1411,7 @@ with tab_trends:
             fig_trends = go.Figure()
 
             term_cols = [c for c in trends_df.columns if c != "date"]
-            colors = ["#f77f00", "#3b82f6", "#22c55e", "#a855f7", "#ef4444"]
+            colors = ["#22d3ee", "#fbbf24", "#34d399", "#c084fc", "#fb7185"]
 
             for i, col in enumerate(term_cols):
                 fig_trends.add_trace(
@@ -1313,7 +1426,7 @@ with tab_trends:
             fig_trends.update_layout(
                 template="plotly_dark",
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(17,24,39,0.5)",
+                plot_bgcolor="rgba(12,18,34,0.4)",
                 height=350, margin=dict(l=0, r=0, t=10, b=0),
                 yaxis_title="Relatives Suchinteresse (0-100)",
                 yaxis_title_font=dict(size=10, color="#64748b"),
@@ -1322,7 +1435,7 @@ with tab_trends:
                     font=dict(size=9, color="#94a3b8"), bgcolor="rgba(0,0,0,0)",
                 ),
                 hovermode="x unified",
-                hoverlabel=dict(bgcolor="#1e293b", bordercolor="#334155", font_size=12),
+                hoverlabel=dict(bgcolor="#1a2538", bordercolor="rgba(34,211,238,0.2)", font_size=12),
             )
             fig_trends.update_xaxes(gridcolor="rgba(255,255,255,0.03)", tickfont=dict(size=9, color="#64748b"))
             fig_trends.update_yaxes(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=9, color="#64748b"))
