@@ -19,23 +19,23 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Darker+Grotesque:wght@300;400;500;600;700;900&family=Azeret+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg-void: #1a1a24;
-    --bg-deep: #1f1f2b;
-    --bg-surface: #242436;
-    --bg-card: #2c2c42;
+    --bg-void: #212131;
+    --bg-deep: #272738;
+    --bg-surface: #2c2c40;
+    --bg-card: #34344c;
     --accent: #d4956a;
     --accent-bright: #e8b08a;
-    --accent-dim: rgba(212,149,106,0.08);
-    --accent-glow: rgba(212,149,106,0.15);
+    --accent-dim: rgba(212,149,106,0.10);
+    --accent-glow: rgba(212,149,106,0.18);
     --signal-teal: #5eead4;
     --signal-violet: #a78bfa;
     --signal-rose: #fb7185;
     --signal-lime: #a3e635;
     --text-bright: #f5f0eb;
-    --text-primary: #d4cfc8;
-    --text-secondary: #8a857e;
-    --text-muted: #524e48;
-    --border: rgba(212,149,106,0.10);
+    --text-primary: #e8e3db;
+    --text-secondary: #908a80;
+    --text-muted: #6b665e;
+    --border: rgba(212,149,106,0.14);
     --border-hover: rgba(212,149,106,0.18);
     --font-display: 'Darker Grotesque', sans-serif;
     --font-body: 'Bricolage Grotesque', sans-serif;
