@@ -31,10 +31,8 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Global */
     .block-container { padding-top: 1.5rem; }
 
-    /* KPI cards */
     div[data-testid="stMetric"] {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         border: 1px solid #0f3460;
@@ -54,7 +52,6 @@ st.markdown(
         font-weight: 700;
     }
 
-    /* Section headers */
     .section-header {
         color: #ccd6f6;
         font-size: 1.15rem;
@@ -65,19 +62,13 @@ st.markdown(
         letter-spacing: 0.02em;
     }
 
-    /* Sidebar branding */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%);
     }
-    [data-testid="stSidebar"] .stMarkdown h1 {
-        color: #f77f00;
-        font-size: 1.4rem;
-    }
+    [data-testid="stSidebar"] .stMarkdown h1 { color: #f77f00; font-size: 1.4rem; }
 
-    /* Table highlight */
-    .critical-row { background-color: rgba(247, 127, 0, 0.15); }
+    .stAlert { font-weight: bold; }
 
-    /* Hide default Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     </style>
@@ -92,6 +83,7 @@ with st.sidebar:
     st.caption("Ganzimmun Edition · Limbach Group")
     st.divider()
 
+    st.subheader("⚙️ Forecast Settings")
     forecast_horizon = st.slider(
         "Forecast Horizon (days)", min_value=7, max_value=21, value=14, step=7
     )
@@ -103,13 +95,16 @@ with st.sidebar:
     )
 
     st.divider()
-
-    refresh = st.button("🔄  Refresh Data from RKI", use_container_width=True)
+    st.markdown("**🔬 Stress Test Scenario**")
+    scenario_uplift = st.slider(
+        "Virus Load Uplift (%)",
+        min_value=0, max_value=50, value=0, step=5,
+        help="Simulate a sudden spike in infection rates to stress-test supply chain resilience.",
+    )
 
     st.divider()
-    st.caption(
-        f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    )
+    refresh = st.button("🔄  Refresh Data from RKI", use_container_width=True)
+    st.caption(f"Last updated: {datetime.now().strftime('%H:%M')}")
     st.caption("Data: RKI AMELAG Wastewater Surveillance")
 
 
@@ -125,24 +120,24 @@ if refresh:
     st.cache_data.clear()
 
 wastewater_df, lab_df = load_data()
+
 forecast_df, kpis = build_forecast(
     lab_df,
     horizon_days=forecast_horizon,
     safety_buffer_pct=safety_buffer / 100,
     stock_on_hand=stock_on_hand,
+    scenario_uplift_pct=scenario_uplift / 100,
 )
 
-# ── Header ───────────────────────────────────────────────────────────────────
+# ── Header & Alerts ──────────────────────────────────────────────────────────
 st.markdown(
     """
     <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">
         <span style="font-size:2rem;">🧬</span>
         <div>
-            <span style="font-size:1.6rem;font-weight:700;color:#e6f1ff;">
-                LabPulse AI
-            </span>
+            <span style="font-size:1.6rem;font-weight:700;color:#e6f1ff;">LabPulse AI</span>
             <span style="font-size:0.9rem;color:#8892b0;margin-left:0.6rem;">
-                Predictive Reagent Demand Management
+                Predictive Supply Chain Control
             </span>
         </div>
     </div>
@@ -150,32 +145,48 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Section 1: Controller's Cockpit ─────────────────────────────────────────
-st.markdown('<div class="section-header">📊 Controller\'s Cockpit</div>', unsafe_allow_html=True)
+# Critical alert banner
+if kpis.get("risk_eur", 0) > 0:
+    stockout = kpis.get("stockout_day")
+    stockout_str = f" Stock depleted by **{stockout.strftime('%d %b %Y')}**." if stockout else ""
+    st.error(
+        f"🚨 **CRITICAL:** Revenue at Risk of **€{kpis['risk_eur']:,.0f}** "
+        f"over the next {forecast_horizon} days.{stockout_str} Order immediately!"
+    )
+elif scenario_uplift > 0:
+    st.info(f"ℹ️ **Simulation active:** +{scenario_uplift}% virus load uplift applied to forecast.")
 
-c1, c2, c3, c4 = st.columns(4)
+
+# ── Section 1: Controller's Cockpit ─────────────────────────────────────────
+st.markdown(
+    '<div class="section-header">📊 Controller\'s Cockpit</div>',
+    unsafe_allow_html=True,
+)
+
+c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
-    st.metric(
-        "Predicted Tests (7 d)",
-        f"{kpis['predicted_tests_7d']:,}",
-    )
+    st.metric("Predicted Tests (7 d)", f"{kpis['predicted_tests_7d']:,}")
 with c2:
-    st.metric(
-        "Revenue Forecast (7 d)",
-        f"€{kpis['revenue_forecast_7d']:,.0f}",
-    )
+    st.metric("Revenue Forecast (7 d)", f"€{kpis['revenue_forecast_7d']:,.0f}")
 with c3:
     st.metric(
         "Reagent Status",
         kpis["reagent_status"],
-        delta=f"{kpis['stock_on_hand']:,} on hand vs {kpis['total_demand']:,} demand",
+        delta="Stock OK" if "Optimal" in kpis["reagent_status"] else "Stockout Risk!",
         delta_color="normal" if "Optimal" in kpis["reagent_status"] else "inverse",
     )
 with c4:
+    risk_val = kpis.get("risk_eur", 0)
+    st.metric(
+        "Revenue at Risk",
+        f"€{risk_val:,.0f}",
+        delta="No risk" if risk_val == 0 else "Action needed!",
+        delta_color="off" if risk_val == 0 else "inverse",
+    )
+with c5:
     st.metric(
         "Trend vs Last Week",
         f"{kpis['trend_pct']:+.1f} %",
-        delta=f"{kpis['trend_pct']:+.1f} %",
         delta_color="normal" if kpis["trend_pct"] >= 0 else "inverse",
     )
 
@@ -187,57 +198,47 @@ st.markdown(
 )
 
 today = pd.Timestamp(datetime.today().normalize())
-
-# Prepare chart data — last 180 days + forecast window
-chart_start = today - pd.Timedelta(days=180)
+chart_start = today - pd.Timedelta(days=120)
 
 ww_chart = wastewater_df[wastewater_df["date"] >= chart_start].copy()
 lab_chart = lab_df[lab_df["date"] >= chart_start].copy()
-
-# Split lab into actuals and forecast
 lab_actuals = lab_chart[lab_chart["date"] <= today]
-lab_forecast = lab_chart[lab_chart["date"] > today].head(forecast_horizon)
 
-# If not enough future lab data, create from forecast_df
-if len(lab_forecast) < forecast_horizon:
-    lab_forecast = forecast_df.rename(
-        columns={"Date": "date", "Predicted Volume": "order_volume"}
-    )
-    if "date" not in lab_forecast.columns:
-        lab_forecast = forecast_df.copy()
-        lab_forecast.columns = ["date", "order_volume", "reagent_order", "est_revenue"]
+# Prepare forecast line for chart
+lab_forecast_chart = forecast_df.rename(
+    columns={"Date": "date", "Predicted Volume": "order_volume"}
+)
 
 fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-# Wastewater trace (leading indicator)
+# 1. Wastewater (leading indicator)
 fig.add_trace(
     go.Scatter(
         x=ww_chart["date"],
         y=ww_chart["virus_load"],
-        name="Virus Load (Wastewater)",
+        name="Virus Load (RKI)",
         line=dict(color="#4a6fa5", width=2),
-        opacity=0.7,
-        hovertemplate="Date: %{x}<br>Virus Load: %{y:,.0f}<extra></extra>",
+        opacity=0.6,
+        hovertemplate="%{x|%d %b}: %{y:,.0f} copies/L<extra></extra>",
     ),
     secondary_y=False,
 )
 
-# Lab actuals
+# 2. Lab actuals
 fig.add_trace(
     go.Scatter(
         x=lab_actuals["date"],
         y=lab_actuals["order_volume"],
-        name="Lab Volume (Actual)",
+        name="Lab Tests (Actual)",
         line=dict(color="#f77f00", width=2.5),
-        hovertemplate="Date: %{x}<br>Tests: %{y:,.0f}<extra></extra>",
+        hovertemplate="%{x|%d %b}: %{y:,.0f} tests<extra></extra>",
     ),
     secondary_y=True,
 )
 
-# Lab forecast (dashed)
-if not lab_forecast.empty:
-    vol_col = "order_volume" if "order_volume" in lab_forecast.columns else lab_forecast.columns[1]
-    # Connect forecast to last actual point
+# 3. Lab forecast (dashed, connected to last actual)
+if not lab_forecast_chart.empty:
+    vol_col = "order_volume"
     if not lab_actuals.empty:
         connector = pd.DataFrame(
             {
@@ -245,22 +246,23 @@ if not lab_forecast.empty:
                 vol_col: [lab_actuals["order_volume"].iloc[-1]],
             }
         )
-        fc_plot = pd.concat([connector, lab_forecast], ignore_index=True)
+        fc_plot = pd.concat([connector, lab_forecast_chart], ignore_index=True)
     else:
-        fc_plot = lab_forecast
+        fc_plot = lab_forecast_chart
 
+    label = f"Forecast (+{scenario_uplift}%)" if scenario_uplift > 0 else "Forecast"
     fig.add_trace(
         go.Scatter(
             x=fc_plot["date"],
             y=fc_plot[vol_col],
-            name="Lab Volume (Forecast)",
+            name=label,
             line=dict(color="#f77f00", width=2.5, dash="dot"),
-            hovertemplate="Date: %{x}<br>Predicted: %{y:,.0f}<extra></extra>",
+            hovertemplate="%{x|%d %b}: %{y:,.0f} predicted<extra></extra>",
         ),
         secondary_y=True,
     )
 
-# Today line
+# TODAY marker
 fig.add_vline(
     x=today,
     line_width=2,
@@ -290,65 +292,134 @@ fig.update_layout(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(10,10,26,0.6)",
-    height=420,
-    margin=dict(l=60, r=60, t=40, b=40),
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="center",
-        x=0.5,
-        font=dict(size=11),
-    ),
+    height=440,
+    margin=dict(l=10, r=10, t=30, b=10),
+    legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=11)),
     hovermode="x unified",
 )
-fig.update_xaxes(
-    title_text="",
-    gridcolor="rgba(255,255,255,0.05)",
-    dtick="M1",
-    tickformat="%b %Y",
-)
+fig.update_xaxes(gridcolor="rgba(255,255,255,0.05)", dtick="M1", tickformat="%b %Y")
 fig.update_yaxes(
     title_text="Virus Load (copies/L)",
     secondary_y=False,
-    gridcolor="rgba(255,255,255,0.05)",
+    showgrid=False,
     title_font=dict(color="#4a6fa5"),
 )
 fig.update_yaxes(
     title_text="Daily Lab Tests",
     secondary_y=True,
-    gridcolor="rgba(255,255,255,0.05)",
+    gridcolor="rgba(255,255,255,0.1)",
     title_font=dict(color="#f77f00"),
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ── Section 3: Actionable Insights Table ─────────────────────────────────────
+
+# ── Section 2b: Stock Burndown Chart ────────────────────────────────────────
 st.markdown(
-    '<div class="section-header">📋 Actionable Forecast & Reagent Orders</div>',
+    '<div class="section-header">🏭 Reagent Stock Burndown</div>',
     unsafe_allow_html=True,
 )
 
-# Style the dataframe: highlight rows where an order is needed
+remaining = kpis.get("remaining_stock", [])
+if remaining:
+    burndown_dates = forecast_df["Date"].values
+    fig_burn = go.Figure()
+
+    # Remaining stock area
+    fig_burn.add_trace(
+        go.Scatter(
+            x=burndown_dates,
+            y=remaining,
+            name="Remaining Stock",
+            fill="tozeroy",
+            line=dict(color="#2ecc71", width=2),
+            fillcolor="rgba(46,204,113,0.15)",
+            hovertemplate="%{x|%d %b}: %{y:,.0f} units left<extra></extra>",
+        )
+    )
+
+    # Cumulative demand line
+    forecast_buffered = forecast_df["Predicted Volume"].values
+    cum_demand = np.cumsum(forecast_buffered)
+    fig_burn.add_trace(
+        go.Scatter(
+            x=burndown_dates,
+            y=cum_demand,
+            name="Cumulative Demand",
+            line=dict(color="#e74c3c", width=2, dash="dot"),
+            hovertemplate="%{x|%d %b}: %{y:,.0f} cumulative tests<extra></extra>",
+        )
+    )
+
+    # Starting stock reference line
+    fig_burn.add_hline(
+        y=stock_on_hand,
+        line_dash="longdash",
+        line_color="#8892b0",
+        annotation_text=f"Starting Stock: {stock_on_hand:,}",
+        annotation_position="top left",
+        annotation_font_color="#8892b0",
+    )
+
+    # Mark stockout day
+    stockout_day = kpis.get("stockout_day")
+    if stockout_day is not None:
+        fig_burn.add_vline(
+            x=stockout_day,
+            line_width=2,
+            line_dash="dash",
+            line_color="#e74c3c",
+            annotation_text="STOCKOUT",
+            annotation_position="top",
+            annotation_font_color="#e74c3c",
+            annotation_font_size=11,
+        )
+
+    fig_burn.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(10,10,26,0.6)",
+        height=300,
+        margin=dict(l=10, r=10, t=20, b=10),
+        legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(size=11)),
+        hovermode="x unified",
+        yaxis_title="Units",
+    )
+    fig_burn.update_xaxes(gridcolor="rgba(255,255,255,0.05)")
+    fig_burn.update_yaxes(gridcolor="rgba(255,255,255,0.1)")
+
+    st.plotly_chart(fig_burn, use_container_width=True)
+
+
+# ── Section 3: Actionable Insights Table ─────────────────────────────────────
+st.markdown(
+    '<div class="section-header">📋 Actionable Order Recommendation</div>',
+    unsafe_allow_html=True,
+)
+
+
 def highlight_orders(row):
     if row["Reagent Order"] > 0:
-        return ["background-color: rgba(247, 127, 0, 0.18); color: #f77f00;"] * len(row)
+        return [
+            "background-color: rgba(231, 76, 60, 0.25); color: #ff8888; font-weight: bold;"
+        ] * len(row)
     return [""] * len(row)
 
 
-styled = (
-    forecast_df.style
-    .apply(highlight_orders, axis=1)
-    .format(
-        {
-            "Predicted Volume": "{:,.0f}",
-            "Reagent Order": "{:,.0f}",
-            "Est. Revenue (€)": "€{:,.0f}",
-        }
-    )
+styled = forecast_df.style.apply(highlight_orders, axis=1).format(
+    {
+        "Predicted Volume": "{:,.0f}",
+        "Reagent Order": "{:,.0f}",
+        "Est. Revenue (€)": "€{:,.0f}",
+    }
 )
 
-st.dataframe(styled, use_container_width=True, hide_index=True, height=min(400, 40 + 35 * len(forecast_df)))
+st.dataframe(
+    styled,
+    use_container_width=True,
+    hide_index=True,
+    height=min(400, 40 + 35 * len(forecast_df)),
+)
 
 
 # ── Footer ───────────────────────────────────────────────────────────────────

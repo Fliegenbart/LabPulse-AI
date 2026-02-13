@@ -120,11 +120,12 @@ def generate_lab_volume(
     lag_days: int = DEFAULT_LAG_DAYS,
 ) -> pd.DataFrame:
     """
-    Derive synthetic lab test volume from wastewater signal:
+    Derive synthetic lab test volume from wastewater signal with WEEKLY SEASONALITY.
       1. Shift forward by `lag_days`.
       2. Min-max normalize to [LAB_SCALE_MIN, LAB_SCALE_MAX].
-      3. Add Gaussian noise (±10 %).
-      4. Compute revenue.
+      3. Apply weekday seasonality (Mon peak, weekend near-zero).
+      4. Add Gaussian noise (±10 %).
+      5. Compute revenue.
     """
     np.random.seed(0)
     df = wastewater_df.copy()
@@ -143,10 +144,18 @@ def generate_lab_volume(
             LAB_SCALE_MAX - LAB_SCALE_MIN
         )
 
+    # Weekly Seasonality (0=Monday … 6=Sunday)
+    day_of_week = df["date"].dt.dayofweek
+    seasonality = np.ones(len(df))
+    seasonality = np.where(day_of_week == 0, 1.4, seasonality)   # Monday backlog
+    seasonality = np.where(day_of_week == 4, 0.8, seasonality)   # Friday taper
+    seasonality = np.where(day_of_week >= 5, 0.1, seasonality)   # Weekend skeleton crew
+    scaled = scaled * seasonality
+
     # Add organic noise
     noise = np.random.normal(1.0, NOISE_FACTOR, size=len(scaled))
     order_volume = np.round(scaled * noise).astype(int)
-    order_volume = np.clip(order_volume, LAB_SCALE_MIN, LAB_SCALE_MAX + 200)
+    order_volume = np.maximum(order_volume, 50)  # floor (emergency-only minimum)
 
     df["order_volume"] = order_volume
     df["revenue"] = df["order_volume"] * AVG_REVENUE_PER_TEST
@@ -161,16 +170,18 @@ def build_forecast(
     horizon_days: int = 14,
     safety_buffer_pct: float = 0.10,
     stock_on_hand: int = 5000,
+    scenario_uplift_pct: float = 0.0,
 ) -> Tuple[pd.DataFrame, dict]:
     """
-    Build a simple forecast table and KPI dict.
+    Build forecast with scenario simulation and Revenue-at-Risk KPI.
 
     Returns
     -------
     forecast_df : DataFrame
         Date | Predicted Volume | Recommended Reagent Order | Est. Revenue
     kpis : dict
-        predicted_tests_7d, revenue_forecast_7d, reagent_status, trend_pct
+        predicted_tests_7d, revenue_forecast_7d, reagent_status, trend_pct,
+        risk_eur, stock_on_hand, total_demand, stockout_day
     """
     today = pd.Timestamp(datetime.today()).normalize()
 
@@ -192,7 +203,6 @@ def build_forecast(
         )
         np.random.seed(99)
         extra_vols = np.random.normal(mean_vol, std_vol, size=horizon_days).astype(int)
-        extra_vols = np.clip(extra_vols, LAB_SCALE_MIN, LAB_SCALE_MAX + 200)
         future = pd.DataFrame(
             {
                 "date": extra_dates,
@@ -202,22 +212,49 @@ def build_forecast(
         )
 
     forecast = future.head(horizon_days).copy()
+
+    # Scenario simulation: uplift demand
+    if scenario_uplift_pct > 0:
+        forecast["order_volume"] = (
+            forecast["order_volume"] * (1 + scenario_uplift_pct)
+        ).astype(int)
+        forecast["revenue"] = forecast["order_volume"] * AVG_REVENUE_PER_TEST
+
     forecast["buffered_volume"] = np.ceil(
         forecast["order_volume"] * (1 + safety_buffer_pct)
     ).astype(int)
 
-    cumulative = forecast["buffered_volume"].cumsum()
-    reagent_order = np.maximum(cumulative - stock_on_hand, 0)
-    reagent_order_daily = reagent_order.diff().fillna(reagent_order.iloc[0]).astype(int)
-    reagent_order_daily = np.maximum(reagent_order_daily, 0)
-    forecast["recommended_order"] = reagent_order_daily
+    # Day-by-day stock drawdown → order when depleted
+    orders = []
+    remaining_stock = []
+    current_stock = stock_on_hand
+    stockout_day = None
+    for i, demand in enumerate(forecast["buffered_volume"]):
+        if current_stock < demand:
+            needed = demand - current_stock
+            orders.append(needed)
+            if stockout_day is None:
+                stockout_day = forecast["date"].iloc[i]
+            current_stock = 0  # depleted, order covers today only
+        else:
+            orders.append(0)
+            current_stock -= demand
+        remaining_stock.append(current_stock)
+
+    forecast["recommended_order"] = orders
+    forecast["remaining_stock"] = remaining_stock
     forecast["est_revenue"] = forecast["order_volume"] * AVG_REVENUE_PER_TEST
 
     # ── KPIs ──
     pred_7d = int(forecast.head(7)["order_volume"].sum())
     rev_7d = pred_7d * AVG_REVENUE_PER_TEST
-    total_demand = int(forecast["buffered_volume"].sum())
-    reagent_status = "Optimal ✅" if stock_on_hand >= total_demand else "Critical ⚠️"
+    total_demand_horizon = int(forecast["buffered_volume"].sum())
+
+    # Revenue at Risk: revenue lost from shortage if no reorder happens
+    shortage = max(0, total_demand_horizon - stock_on_hand)
+    risk_eur = shortage * AVG_REVENUE_PER_TEST
+
+    reagent_status = "Optimal ✅" if stock_on_hand >= total_demand_horizon else "Critical ⚠️"
 
     # Trend: compare last 7 vs previous 7 actuals
     last_7 = actuals.tail(7)["order_volume"].sum()
@@ -230,7 +267,10 @@ def build_forecast(
         "reagent_status": reagent_status,
         "trend_pct": round(trend_pct, 1),
         "stock_on_hand": stock_on_hand,
-        "total_demand": total_demand,
+        "total_demand": total_demand_horizon,
+        "risk_eur": risk_eur,
+        "stockout_day": stockout_day,
+        "remaining_stock": remaining_stock,
     }
 
     display_cols = {
