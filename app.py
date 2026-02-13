@@ -19,10 +19,10 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Darker+Grotesque:wght@300;400;500;600;700;900&family=Azeret+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    --bg-void: #06060b;
-    --bg-deep: #0b0b14;
-    --bg-surface: #12121e;
-    --bg-card: #16162a;
+    --bg-void: #131319;
+    --bg-deep: #17171f;
+    --bg-surface: #1b1b27;
+    --bg-card: #222234;
     --accent: #d4956a;
     --accent-bright: #e8b08a;
     --accent-dim: rgba(212,149,106,0.08);
