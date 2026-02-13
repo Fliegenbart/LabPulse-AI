@@ -264,7 +264,7 @@ if not lab_forecast_chart.empty:
 
 # TODAY marker
 fig.add_vline(
-    x=today,
+    x=today.isoformat(),
     line_width=2,
     line_dash="dash",
     line_color="#e74c3c",
@@ -276,7 +276,7 @@ fig.add_vline(
 
 # Lag annotation
 fig.add_annotation(
-    x=today - pd.Timedelta(days=7),
+    x=(today - pd.Timedelta(days=7)).isoformat(),
     y=0.95,
     yref="paper",
     text="← 14-day lag →",
@@ -365,7 +365,7 @@ if remaining:
     stockout_day = kpis.get("stockout_day")
     if stockout_day is not None:
         fig_burn.add_vline(
-            x=stockout_day,
+            x=pd.Timestamp(stockout_day).isoformat(),
             line_width=2,
             line_dash="dash",
             line_color="#e74c3c",
