@@ -188,8 +188,14 @@ def _ensure_data() -> None:
         state.rebuild()
 
 
-def _kpi_card(title: str, value: str, sub: str, color_class: str = "text-cyan-100") -> None:
-    with ui.card().classes("lp-card lp-kpi"):
+def _kpi_card(
+    title: str,
+    value: str,
+    sub: str,
+    color_class: str = "text-cyan-100",
+    extra_class: str = "",
+) -> None:
+    with ui.card().classes(f"lp-card lp-kpi {extra_class}"):
         ui.label(title).classes("lp-kpi-label")
         ui.label(value).classes(f"lp-kpi-value {color_class}")
         ui.label(sub).classes("lp-kpi-sub")
@@ -321,7 +327,7 @@ def _build_forecast_rows() -> List[Dict[str, Any]]:
 @ui.refreshable
 def dashboard_body() -> None:
     if state.loading:
-        with ui.card().classes("lp-card q-pa-md"):
+        with ui.card().classes("lp-card q-pa-md lp-float"):
             with ui.row().classes("items-center gap-3"):
                 ui.spinner("dots", size="2em")
                 ui.label("Daten werden geladen und Prognose wird berechnet ...")
@@ -332,18 +338,20 @@ def dashboard_body() -> None:
             ui.label("Warnung: Berechnung teilweise im Fallback.").classes("text-amber-200")
             ui.label(state.last_error).classes("text-xs lp-muted")
 
-    with ui.row().classes("w-full gap-4"):
+    with ui.row().classes("w-full grid grid-cols-1 md:grid-cols-4 gap-4 lp-kpi-grid"):
         _kpi_card(
             "Revenue 7 Tage",
             _fmt_eur(float(state.kpis.get("revenue_forecast_7d", 0))),
             f"{state.kpis.get('trend_pct', 0):+.1f}% WoW",
             "text-cyan-100",
+            "md:col-span-2 lp-glow-strong",
         )
         _kpi_card(
             "Risikopotenzial",
             _fmt_eur(float(state.kpis.get("risk_eur", 0.0))),
             "Unterdeckungsrisiko bei Bestandslücken",
             "text-rose-200" if float(state.kpis.get("risk_eur", 0.0)) > 0 else "text-emerald-200",
+            ("lg:border-red-400/30" if float(state.kpis.get("risk_eur", 0.0)) > 0 else ""),
         )
         stock_level = int(state.kpis.get("stock_on_hand", state.stock_level))
         avg_daily = float(state.kpis.get("predicted_tests_7d", 0.0)) / 7 if state.kpis.get("predicted_tests_7d") else 0
@@ -361,28 +369,61 @@ def dashboard_body() -> None:
             "text-violet-100",
         )
 
-    with ui.row().classes("w-full gap-3 items-center"):
+    with ui.card().classes("lp-card q-pa-sm lp-surface"):
+        with ui.row().classes("w-full items-center gap-3 flex-wrap"):
+            ui.label("Signal- und Modell-Setup").classes("lp-chip")
+            ui.separator().classes("lp-separator")
         ui.select(
             options=get_signal_source_options(),
             value=get_signal_source_label(state.signal_source),
             label="Signalquelle",
             on_change=lambda e: _set_signal_source(e.value),
-        ).classes("w-[280px]")
+        ).classes("w-[300px] lp-input").props("borderless")
         ui.select(
             options=state.pathogen_options,
             value=state.pathogen,
             label="Erreger",
             on_change=lambda e: _set_pathogen(e.value),
-        ).classes("w-[220px]")
-        ui.checkbox("Prophet aktiv", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("ml-1")
+        ).classes("w-[220px] lp-input").props("borderless")
+        ui.checkbox("Prophet aktiv", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("lp-checkbox")
         ui.space()
-        ui.chip("Engine: " + ("Prophet" if state.use_prophet else "Rule-Based")).classes("lp-chip")
+        ui.chip("Engine: " + ("Prophet" if state.use_prophet else "Rule-Based")).classes("lp-chip lp-chip-emph")
         if state.model_info.get("confidence") is not None:
             ui.chip(f"Confidence {state.model_info['confidence']:.0f}%").classes("lp-chip")
 
-    with ui.card().classes("lp-card q-pa-sm mt-2"):
-        ui.label("Forecast, Trend und Bestellimpuls").classes("lp-title")
-        ui.plotly(_build_chart()).classes("w-full mt-2")
+    with ui.row().classes("w-full grid grid-cols-1 xl:grid-cols-5 gap-4 mt-2"):
+        with ui.card().classes("lp-card q-pa-sm xl:col-span-3 lp-panel"):
+            ui.label("Forecast, Trend und Bestellimpuls").classes("lp-title")
+            ui.plotly(_build_chart()).classes("w-full mt-2")
+        with ui.column().classes("xl:col-span-2 gap-3"):
+            with ui.card().classes("lp-card flex-1 lp-panel"):
+                with ui.row().classes("items-center justify-between"):
+                    ui.label("Decision Loop").classes("text-lg lp-title")
+                    ui.label(state.ai_backend or "bereit").classes("text-xs lp-muted")
+                if state.ai_summary:
+                    ui.markdown(state.ai_summary).classes("lp-muted")
+                else:
+                    ui.label("Noch keine KI-Einschätzung. Bitte Decision Loop starten.").classes("text-xs lp-muted")
+            with ui.card().classes("lp-card lp-panel"):
+                ui.label("Google Trends (Kernausschnitt)").classes("text-lg lp-title")
+                if state.trend_df.empty:
+                    ui.label("Noch keine Trendsignale verfügbar.").classes("text-xs lp-muted")
+                else:
+                    rows = [
+                        {
+                            "Datum": pd.Timestamp(r["date"]).strftime("%d.%m.%Y"),
+                            "Score": f"{float(r['trend_score']):.0f}",
+                        }
+                        for _, r in state.trend_df.sort_values("date").tail(8).iterrows()
+                    ]
+                    ui.table(
+                        columns=[
+                            {"name": "Datum", "label": "Datum", "field": "Datum", "align": "left"},
+                            {"name": "Score", "label": "Score", "field": "Score", "align": "right"},
+                        ],
+                        rows=rows,
+                        row_key="Datum",
+                    ).classes("w-full lp-table")
 
     tabs = ui.tabs()
     with tabs:
@@ -402,7 +443,7 @@ def dashboard_body() -> None:
                     ],
                     rows=_build_forecast_rows(),
                     row_key="Date",
-                ).classes("w-full")
+                ).classes("w-full lp-table")
 
         with ui.tab_panel(t2):
             with ui.card().classes("lp-card"):
@@ -415,7 +456,7 @@ def dashboard_body() -> None:
                     ],
                     rows=_build_forecast_rows(),
                     row_key="Date",
-                ).classes("w-full")
+                ).classes("w-full lp-table")
 
         with ui.tab_panel(t3):
             with ui.card().classes("lp-card"):
@@ -437,37 +478,6 @@ def dashboard_body() -> None:
                         margin={"l": 12, "r": 8, "t": 10, "b": 30},
                     )
                     ui.plotly(hr).classes("w-full")
-
-    with ui.row().classes("w-full gap-4 mt-2"):
-        with ui.card().classes("lp-card flex-1"):
-            with ui.row().classes("items-center justify-between"):
-                ui.label("Decision Loop (Mensch + KI)").classes("text-lg lp-title")
-                ui.label(state.ai_backend or "bereit").classes("text-xs lp-muted")
-            if state.ai_summary:
-                ui.markdown(state.ai_summary).classes("lp-muted")
-            else:
-                ui.label("Noch keine KI-Einschätzung. Bitte Decision Loop starten.").classes("text-xs lp-muted")
-
-        with ui.card().classes("lp-card w-[320px]"):
-            ui.label("Google Trends (Kernausschnitt)").classes("text-lg lp-title")
-            if state.trend_df.empty:
-                ui.label("Noch keine Trendsignale verfügbar.").classes("text-xs lp-muted")
-            else:
-                rows = [
-                    {
-                        "Datum": pd.Timestamp(r["date"]).strftime("%d.%m.%Y"),
-                        "Score": f"{float(r['trend_score']):.0f}",
-                    }
-                    for _, r in state.trend_df.sort_values("date").tail(8).iterrows()
-                ]
-                ui.table(
-                    columns=[
-                        {"name": "Datum", "label": "Datum", "field": "Datum", "align": "left"},
-                        {"name": "Score", "label": "Score", "field": "Score", "align": "right"},
-                    ],
-                    rows=rows,
-                    row_key="Datum",
-                ).classes("w-full")
 
 
 def _rebuild_and_refresh() -> None:
@@ -568,25 +578,30 @@ def dashboard_page() -> None:
     _inject_styles()
     _ensure_data()
 
-    with ui.left_drawer(value=False, fixed=True, bordered=True).props("width=360 overlay").classes("lp-drawer") as control_drawer:
+    with ui.left_drawer(
+        value=False,
+        fixed=True,
+        bordered=True,
+        elevated=False,
+    ).props("width=360 overlay").classes("lp-drawer") as control_drawer:
         ui.label("Steuerzentrum").classes("text-lg lp-title")
         ui.label("Lager-, Signalkontext, Modellsteuerung").classes("lp-muted")
         ui.separator()
 
-        ui.input("Unternehmen", value=state.company_name, on_change=lambda e: _set_company(e.value)).classes("w-full")
-        ui.input("Facility", value=state.facility_name, on_change=lambda e: _set_facility(e.value)).classes("w-full mt-2")
+        ui.input("Unternehmen", value=state.company_name, on_change=lambda e: _set_company(e.value)).classes("w-full lp-input").props("borderless")
+        ui.input("Facility", value=state.facility_name, on_change=lambda e: _set_facility(e.value)).classes("w-full mt-2 lp-input").props("borderless")
         ui.select(
             label="Signalquelle",
             options=get_signal_source_options(),
             value=get_signal_source_label(state.signal_source),
             on_change=lambda e: _set_signal_source(e.value),
-        ).classes("w-full mt-2")
+        ).classes("w-full mt-2 lp-input").props("borderless")
         ui.select(
             label="Erreger",
             options=state.pathogen_options,
             value=state.pathogen,
             on_change=lambda e: _set_pathogen(e.value),
-        ).classes("w-full mt-2")
+        ).classes("w-full mt-2 lp-input").props("borderless")
         ui.label("Horizon (Tage)").classes("lp-muted")
         ui.slider(
             min=7,
@@ -594,7 +609,7 @@ def dashboard_page() -> None:
             step=7,
             value=state.forecast_horizon,
             on_change=lambda e: _set_horizon(e.value),
-        ).classes("w-full mt-2")
+        ).classes("w-full mt-2 lp-slider")
         ui.label("Anstiegsszenario (%)").classes("lp-muted")
         ui.slider(
             min=0,
@@ -602,7 +617,7 @@ def dashboard_page() -> None:
             step=5,
             value=state.virus_uplift_pct,
             on_change=lambda e: _set_uplift(e.value),
-        ).classes("w-full")
+        ).classes("w-full lp-slider")
         ui.label("Sicherheits-Puffer (%)").classes("lp-muted")
         ui.slider(
             min=0,
@@ -610,31 +625,31 @@ def dashboard_page() -> None:
             step=1,
             value=int(state.safety_buffer_pct * 100),
             on_change=lambda e: _set_buffer(e.value),
-        ).classes("w-full")
+        ).classes("w-full lp-slider")
         ui.number(
             "Lagerbestand (Tests)",
             value=state.stock_level,
             min=0,
             step=25,
             on_change=lambda e: _set_stock(e.value),
-        ).classes("w-full mt-1")
+        ).classes("w-full mt-1 lp-input").props("outlined borderless dense")
         ui.number(
             "Tests je FTE / Tag",
             value=state.tests_per_fte,
             min=1,
             step=1,
             on_change=lambda e: _set_fte(e.value),
-        ).classes("w-full mt-1")
-        ui.switch("Prophet aktiv", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("mt-2")
+        ).classes("w-full mt-1 lp-input").props("borderless dense")
+        ui.switch("Prophet aktiv", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("mt-2 lp-switch")
         ui.separator()
-        ui.button("Neu berechnen", icon="play_arrow", on_click=_rebuild_and_refresh).classes("w-full mt-2")
-        ui.button("AI Entscheidungslogik", icon="auto_awesome", on_click=_run_decision).classes("w-full mt-2")
+        ui.button("Neu berechnen", icon="play_arrow", on_click=_rebuild_and_refresh).classes("w-full mt-2 lp-action").props("unelevated")
+        ui.button("AI Entscheidungslogik", icon="auto_awesome", on_click=_run_decision).classes("w-full mt-2 lp-action").props("unelevated")
 
     with ui.row().classes("lp-wrap items-center gap-2 mt-1"):
         ui.space()
-        ui.button("Dashboard aktualisieren", icon="autorenew", on_click=_rebuild_and_refresh)
-        ui.button("Decision Loop", icon="auto_awesome", on_click=_run_decision)
-        ui.button("PDF exportieren", icon="picture_as_pdf", on_click=_download_pdf)
+        ui.button("Dashboard aktualisieren", icon="autorenew", on_click=_rebuild_and_refresh).classes("lp-action").props("unelevated")
+        ui.button("Decision Loop", icon="auto_awesome", on_click=_run_decision).classes("lp-action").props("unelevated")
+        ui.button("PDF exportieren", icon="picture_as_pdf", on_click=_download_pdf).classes("lp-action").props("outline unelevated")
         ui.label(f"Update: {state.refreshed_at or '—'}").classes("text-xs lp-muted")
 
         with ui.row().classes("items-center gap-2"):

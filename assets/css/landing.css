@@ -1,21 +1,76 @@
-/* assets/css/landing.css - CLEAN VERSION */
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
 
 :root {
-    /* Blade Runner Palette */
     --lp-bg: #0a0e17;
     --lp-surface: #121a2b;
     --lp-accent: #f59e0b;
     --lp-text: #e2e8f0;
     --lp-text-muted: #64748b;
     --lp-border: rgba(255, 255, 255, 0.08);
+    --lp-border-strong: rgba(255, 255, 255, 0.18);
 }
 
-/* Global Reset für Quasar */
-body {
+html,
+body,
+.q-layout,
+.q-page-container,
+.q-page {
     background-color: var(--lp-bg) !important;
     color: var(--lp-text) !important;
     font-family: 'Sora', sans-serif !important;
+    min-height: 100%;
+}
+
+body {
+    background-image: radial-gradient(1200px 400px at 8% -8%, rgba(59, 130, 246, 0.12), transparent 35%),
+        radial-gradient(900px 300px at 88% 8%, rgba(245, 158, 11, 0.15), transparent 38%),
+        linear-gradient(180deg, rgba(10, 14, 23, 0.95), rgba(10, 14, 23, 1) 52%, rgba(6, 8, 16, 1));
+    overflow-x: hidden;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 0.8px);
+    background-size: 3px 3px;
+    opacity: 0.22;
+    mix-blend-mode: soft-light;
+    z-index: 0;
+}
+
+.lp-wrap {
+    width: min(1320px, 100%);
+    margin: 0 auto;
+    padding: 0.8rem 1rem;
+}
+
+.lp-wrap:first-of-type {
+    position: relative;
+    z-index: 1;
+}
+
+.lp-title {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--lp-text);
+}
+
+.lp-landing {
+    padding-top: 0.2rem;
+}
+
+.lp-hero {
+    padding: 0.4rem;
+}
+
+.lp-hero-headline {
+    margin: 0;
+    font-size: clamp(1.9rem, 4vw, 3.1rem);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    font-weight: 700;
 }
 
 /* Glassmorphism Cards */
@@ -24,18 +79,139 @@ body {
     border: 1px solid var(--lp-border) !important;
     backdrop-filter: blur(12px);
     border-radius: 16px !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+    box-shadow: 0 18px 48px rgba(2, 8, 23, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.lp-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--lp-border-strong) !important;
+    box-shadow: 0 24px 54px rgba(2, 8, 23, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.11) !important;
+}
+
+.lp-panel {
+    overflow: hidden;
+}
+
+.lp-panel.lp-glow-strong {
+    box-shadow: 0 22px 60px rgba(56, 189, 248, 0.14), 0 24px 54px rgba(2, 8, 23, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.lp-kpi {
+    min-height: 122px;
+    padding: 0.9rem;
+}
+
+.lp-kpi-grid {
+    align-items: stretch;
+}
+
+.lp-float {
+    min-height: 96px;
 }
 
 /* Zahlen als Mono für Tech-Look */
-.lp-kpi-value, .lp-mono {
+.lp-kpi-value,
+.lp-mono {
     font-family: 'JetBrains Mono', monospace !important;
 }
 
-/* Quasar Inputs "ent-materialisieren" */
+.lp-kpi-label {
+    color: var(--lp-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.lp-kpi-value {
+    margin-top: 0.3rem;
+    line-height: 1.05;
+    font-size: 1.95rem;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+}
+
+.lp-kpi-sub {
+    margin-top: 0.45rem;
+    color: var(--lp-text-muted);
+    font-size: 12px;
+}
+
+.lp-muted {
+    color: var(--lp-text-muted);
+}
+
+.lp-chip {
+    border-radius: 999px;
+    border: 1px solid var(--lp-border);
+    padding: 0.1rem 0.55rem;
+    color: var(--lp-text-muted);
+    font-size: 11px;
+    letter-spacing: 0.03em;
+}
+
+.lp-chip-emph {
+    border-color: rgba(245, 158, 11, 0.45);
+    color: #fde68a;
+}
+
+.lp-surface {
+    padding: 0.75rem;
+}
+
+.lp-separator {
+    background: var(--lp-border);
+    width: 1px;
+    height: 24px;
+    opacity: 0.6;
+}
+
+.lp-table {
+    max-height: 340px;
+    overflow: auto;
+}
+
+.lp-input {
+    border-radius: 10px !important;
+}
+
 .q-field__control {
     border-radius: 8px !important;
-    background: rgba(255,255,255,0.03) !important;
+    background: rgba(255, 255, 255, 0.03) !important;
 }
+
+.q-field__control:before {
+    border-bottom: none !important;
+}
+
+.lp-switch .q-toggle__inner {
+    color: var(--lp-accent) !important;
+}
+
+.q-slider__track,
+.q-slider__thumb {
+    color: var(--lp-accent) !important;
+}
+
+.lp-slider .q-slider__track {
+    height: 4px;
+}
+
+.q-slider__pin {
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+.lp-action {
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 10px !important;
+    color: var(--lp-text) !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)) !important;
+}
+
+.lp-action:hover {
+    border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
 .q-field__control:before { border-bottom: none !important; } /* Weg mit dem Unterstrich */
 .q-drawer { background: var(--lp-surface) !important; }
