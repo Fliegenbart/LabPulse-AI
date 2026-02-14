@@ -40,6 +40,59 @@ body::before {
     z-index: 0;
 }
 
+.lp-reveal {
+    animation: lp-reveal 0.44s cubic-bezier(0.2, 0, 0.25, 1) both;
+}
+
+.lp-delay-1 { animation-delay: 0.04s; }
+.lp-delay-2 { animation-delay: 0.10s; }
+.lp-delay-3 { animation-delay: 0.16s; }
+.lp-delay-4 { animation-delay: 0.22s; }
+.lp-delay-5 { animation-delay: 0.28s; }
+.lp-delay-6 { animation-delay: 0.34s; }
+.lp-delay-7 { animation-delay: 0.40s; }
+.lp-delay-8 { animation-delay: 0.46s; }
+.lp-delay-9 { animation-delay: 0.52s; }
+
+@keyframes lp-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.lp-toolbar {
+    border-bottom: 1px solid var(--lp-border);
+    padding-bottom: 0.45rem;
+}
+
+.lp-control-grid {
+    display: grid;
+    width: 100%;
+    gap: 0.6rem;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 840px) {
+    .lp-control-grid {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
+.lp-control-grid .q-field,
+.lp-control-grid .q-input,
+.lp-control-grid .q-select,
+.lp-control-grid .q-toggle,
+.lp-control-grid .q-input,
+.lp-control-grid .q-slider {
+    min-width: 0;
+}
+
 .lp-wrap {
     width: min(1320px, 100%);
     margin: 0 auto;
@@ -138,6 +191,17 @@ body::before {
     font-size: 12px;
 }
 
+.lp-drawer {
+    background: linear-gradient(155deg, rgba(14, 21, 36, 0.92), rgba(11, 16, 28, 0.94));
+    border-right: 1px solid var(--lp-border) !important;
+    backdrop-filter: blur(14px) saturate(160%);
+    box-shadow: 0 30px 70px rgba(2, 6, 23, 0.5);
+}
+
+.lp-drawer .q-drawer__content {
+    padding: 0.8rem;
+}
+
 .lp-muted {
     color: var(--lp-text-muted);
 }
@@ -183,6 +247,9 @@ body::before {
 
 .q-field__control:before {
     border-bottom: none !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
 }
 
 .lp-switch .q-toggle__inner {
@@ -202,6 +269,10 @@ body::before {
     font-family: 'JetBrains Mono', monospace !important;
 }
 
+.q-slider__thumb::before {
+    border-color: rgba(245, 158, 11, 0.68) !important;
+}
+
 .lp-action {
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     border-radius: 10px !important;
@@ -213,5 +284,15 @@ body::before {
     border-color: rgba(245, 158, 11, 0.4) !important;
 }
 
-.q-field__control:before { border-bottom: none !important; } /* Weg mit dem Unterstrich */
-.q-drawer { background: var(--lp-surface) !important; }
+.lp-chip:hover,
+.lp-kpi:hover,
+.lp-panel:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 24px 56px rgba(2, 8, 23, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+
+.lp-glass-panel {
+    backdrop-filter: blur(18px) saturate(170%);
+    background: linear-gradient(155deg, rgba(17, 25, 42, 0.66), rgba(12, 16, 28, 0.82));
+}
