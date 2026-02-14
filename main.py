@@ -48,7 +48,8 @@ def _fmt_int(value: float | int | None, decimals: int = 0) -> str:
 
 def _inject_styles() -> None:
     css_path = Path(__file__).resolve().parent / "assets" / "css" / "landing.css"
-    ui.add_css(css_path.read_text(encoding="utf-8"), shared=True)
+    with css_path.open("r", encoding="utf-8") as css_file:
+        ui.add_css(css_file.read(), shared=True)
 
 
 @dataclass
