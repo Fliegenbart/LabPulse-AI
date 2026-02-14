@@ -698,8 +698,69 @@ def dashboard_page() -> None:
     _inject_styles()
     _ensure_data()
 
+    with ui.left_drawer(value=False, fixed=True, bordered=True).props("width=360 overlay").classes("lp-drawer") as control_drawer:
+        ui.label("Steuerzentrum").classes("text-lg lp-title")
+        ui.label("Lager-, Signalkontext, Modellsteuerung").classes("lp-muted")
+        ui.separator()
+
+        ui.input("Unternehmen", value=state.company_name, on_change=lambda e: _set_company(e.value)).classes("w-full")
+        ui.input("Facility", value=state.facility_name, on_change=lambda e: _set_facility(e.value)).classes("w-full mt-2")
+        ui.select(
+            label="Signalquelle",
+            options=get_signal_source_options(),
+            value=get_signal_source_label(state.signal_source),
+            on_change=lambda e: _set_signal_source(e.value),
+        ).classes("w-full mt-2")
+        ui.select(
+            label="Erreger",
+            options=state.pathogen_options,
+            value=state.pathogen,
+            on_change=lambda e: _set_pathogen(e.value),
+        ).classes("w-full mt-2")
+        ui.slider(
+            min=7,
+            max=28,
+            step=7,
+            label="Horizon (Tage)",
+            value=state.forecast_horizon,
+            on_change=lambda e: _set_horizon(e.value),
+        ).classes("w-full mt-2")
+        ui.slider(
+            min=0,
+            max=50,
+            step=5,
+            label="Anstiegsszenario (%)",
+            value=state.virus_uplift_pct,
+            on_change=lambda e: _set_uplift(e.value),
+        ).classes("w-full")
+        ui.slider(
+            min=0,
+            max=40,
+            step=1,
+            label="Sicherheits-Puffer (%)",
+            value=int(state.safety_buffer_pct * 100),
+            on_change=lambda e: _set_buffer(e.value),
+        ).classes("w-full")
+        ui.number(
+            "Lagerbestand (Tests)",
+            value=state.stock_level,
+            min=0,
+            step=25,
+            on_change=lambda e: _set_stock(e.value),
+        ).classes("w-full mt-1")
+        ui.number(
+            "Tests je FTE / Tag",
+            value=state.tests_per_fte,
+            min=1,
+            step=1,
+            on_change=lambda e: _set_fte(e.value),
+        ).classes("w-full mt-1")
+        ui.switch("Prophet aktiv", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("mt-2")
+        ui.separator()
+        ui.button("Neu berechnen", icon="play_arrow", on_click=_rebuild_and_refresh).classes("w-full mt-2")
+        ui.button("AI Entscheidungslogik", icon="auto_awesome", on_click=_run_decision).classes("w-full mt-2")
+
     with ui.row().classes("lp-wrap items-center gap-2 mt-1"):
-        # Drawer reference must be created before button callback
         ui.space()
         ui.button("Dashboard aktualisieren", icon="autorenew", on_click=_rebuild_and_refresh)
         ui.button("Decision Loop", icon="auto_awesome", on_click=_run_decision)
@@ -711,68 +772,6 @@ def dashboard_page() -> None:
             ui.label(f"{state.company_name} · {state.facility_name}").classes("lp-muted")
 
     with ui.row().classes("lp-wrap"):
-        with ui.left_drawer(value=False, fixed=True, bordered=True).props("width=360 overlay").classes("lp-drawer") as control_drawer:
-            ui.label("Steuerzentrum").classes("text-lg lp-title")
-            ui.label("Lager-, Signalkontext, Modellsteuerung").classes("lp-muted")
-            ui.separator()
-
-            ui.input("Unternehmen", value=state.company_name, on_change=lambda e: _set_company(e.value)).classes("w-full")
-            ui.input("Facility", value=state.facility_name, on_change=lambda e: _set_facility(e.value)).classes("w-full mt-2")
-            ui.select(
-                label="Signalquelle",
-                options=get_signal_source_options(),
-                value=get_signal_source_label(state.signal_source),
-                on_change=lambda e: _set_signal_source(e.value),
-            ).classes("w-full mt-2")
-            ui.select(
-                label="Erreger",
-                options=state.pathogen_options,
-                value=state.pathogen,
-                on_change=lambda e: _set_pathogen(e.value),
-            ).classes("w-full mt-2")
-            ui.slider(
-                min=7,
-                max=28,
-                step=7,
-                label="Horizon (Tage)",
-                value=state.forecast_horizon,
-                on_change=lambda e: _set_horizon(e.value),
-            ).classes("w-full mt-2")
-            ui.slider(
-                min=0,
-                max=50,
-                step=5,
-                label="Anstiegsszenario (%)",
-                value=state.virus_uplift_pct,
-                on_change=lambda e: _set_uplift(e.value),
-            ).classes("w-full")
-            ui.slider(
-                min=0,
-                max=40,
-                step=1,
-                label="Sicherheits-Puffer (%)",
-                value=int(state.safety_buffer_pct * 100),
-                on_change=lambda e: _set_buffer(e.value),
-            ).classes("w-full")
-            ui.number(
-                "Lagerbestand (Tests)",
-                value=state.stock_level,
-                min=0,
-                step=25,
-                on_change=lambda e: _set_stock(e.value),
-            ).classes("w-full mt-1")
-            ui.number(
-                "Tests je FTE / Tag",
-                value=state.tests_per_fte,
-                min=1,
-                step=1,
-                on_change=lambda e: _set_fte(e.value),
-            ).classes("w-full mt-1")
-            ui.switch("Prophet aktiv", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("mt-2")
-            ui.separator()
-            ui.button("Neu berechnen", icon="play_arrow", on_click=_rebuild_and_refresh).classes("w-full mt-2")
-            ui.button("AI Entscheidungslogik", icon="auto_awesome", on_click=_run_decision).classes("w-full mt-2")
-
         with ui.column().classes("w-full gap-3"):
             with ui.row().classes("w-full items-center"):
                 ui.button(
