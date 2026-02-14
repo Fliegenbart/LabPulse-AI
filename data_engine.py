@@ -8,6 +8,7 @@ and synthetic lab volume generation with configurable time-lag correlation.
 import io
 import logging
 from datetime import datetime, timedelta
+from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
 
 import duckdb
@@ -18,10 +19,53 @@ import requests
 logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
-RKI_AMELAG_URL = (
-    "https://raw.githubusercontent.com/robert-koch-institut/"
-    "Abwassersurveillance_AMELAG/main/amelag_einzelstandorte.tsv"
+RKI_DATASET_URLS = {
+    "rki_amelag_einzelstandorte": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "Abwassersurveillance_AMELAG/main/amelag_einzelstandorte.tsv"
+    ),
+    "rki_amelag_aggregated": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "Abwassersurveillance_AMELAG/main/amelag_aggregierte_kurve.tsv"
+    ),
+    "rki_covid_7tage_inzidenz": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "COVID-19_7-Tage-Inzidenz_in_Deutschland/main/COVID-19-Faelle_7-Tage-Inzidenz_Deutschland.csv"
+    ),
+    "rki_grippeweb_wochenbericht": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "GrippeWeb_Daten_des_Wochenberichts/main/GrippeWeb_Daten_des_Wochenberichts.tsv"
+    ),
+    "rki_are_konsultationsinzidenz": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "ARE-Konsultationsinzidenz/main/ARE-Konsultationsinzidenz.tsv"
+    ),
+    "rki_influenzafaelle": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "Influenzafaelle_in_Deutschland/main/IfSG_Influenzafaelle.tsv"
+    ),
+    "rki_polio_wa": (
+        "https://raw.githubusercontent.com/robert-koch-institut/"
+        "Polioviren_im_Abwasser-PIA/main/Polioviren_im_Abwasser.csv"
+    ),
+}
+RKI_DEFAULT_DATASET = "rki_amelag_einzelstandorte"
+
+SIGNAL_SOURCES = OrderedDict(
+    {
+        "rki_amelag_einzelstandorte": {"label": "RKI AMELAG – Einzelstandorte"},
+        "rki_amelag_aggregated": {"label": "RKI AMELAG – Aggregiert"},
+        "rki_covid_7tage_inzidenz": {"label": "RKI COVID-19 7-Tage-Inzidenz"},
+        "rki_grippeweb_wochenbericht": {"label": "RKI GrippeWeb (Wochenbericht)"},
+        "rki_are_konsultationsinzidenz": {"label": "RKI ARE-Konsultationsinzidenz"},
+        "rki_influenzafaelle": {"label": "RKI Influenzafälle"},
+        "rki_polio_wa": {"label": "RKI Polioviren im Abwasser-PIA"},
+    }
 )
+AMELAG_DATASET_IDS = {
+    "rki_amelag_einzelstandorte",
+    "rki_amelag_aggregated",
+}
 LAB_SCALE_MIN = 500
 LAB_SCALE_MAX = 2000
 AVG_REVENUE_PER_TEST = 45  # €
@@ -56,9 +100,68 @@ PATHOGEN_SCALE = {
     "RSV": (150, 900),
 }
 
+_NON_AMELAG_DEFAULT_PATHOGENS = {
+    "rki_covid_7tage_inzidenz": ["COVID-19"],
+    "rki_grippeweb_wochenbericht": ["Grippe"],
+    "rki_are_konsultationsinzidenz": ["ARE"],
+    "rki_influenzafaelle": ["Influenza"],
+    "rki_polio_wa": ["Poliovirus"],
+}
+AMELAG_PATHOGEN_DEFAULT = ["SARS-CoV-2", "Influenza A", "Influenza B", "RSV", "Influenza (gesamt)"]
+
 
 # ── DuckDB Singleton ────────────────────────────────────────────────────────
 _CON: Optional[duckdb.DuckDBPyConnection] = None
+_RAW_CACHE: Dict[str, pd.DataFrame] = {}
+
+
+def _normalize_date_input(value: str) -> Optional[pd.Timestamp]:
+    if pd.isna(value):
+        return None
+    if isinstance(value, (pd.Timestamp, datetime)):
+        return pd.to_datetime(value, errors="coerce")
+    text = str(value).strip()
+    if not text or text.lower() in {"na", "nan", "none"}:
+        return None
+    if len(text) >= 8 and "W" in text:
+        normalized = text.replace("_", "-").replace(" ", "-")
+        try:
+            if "W" in normalized and len(normalized) >= 7:
+                year = int(normalized[:4])
+                week = int(normalized.split("W")[1][:2])
+                return pd.to_datetime(datetime.fromisocalendar(year, week, 1))
+        except Exception:
+            return None
+    return pd.to_datetime(text, errors="coerce")
+
+
+def _to_numeric_series(series: pd.Series) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(series.astype(str).str.replace(",", ".", regex=False), errors="coerce")
+
+
+def get_signal_source_options() -> List[str]:
+    """Return human-readable source labels."""
+    return [spec["label"] for spec in SIGNAL_SOURCES.values()]
+
+
+def get_signal_source_id_by_label(label: str) -> str:
+    """Resolve source label to dataset id."""
+    for source_id, spec in SIGNAL_SOURCES.items():
+        if spec["label"] == label:
+            return source_id
+    return RKI_DEFAULT_DATASET
+
+
+def get_signal_source_label(source_id: str) -> str:
+    """Resolve source id to label."""
+    return SIGNAL_SOURCES.get(source_id, {}).get("label", source_id)
+
+
+def get_available_signal_sources() -> Dict[str, str]:
+    """Return source id -> display label mapping."""
+    return {source_id: spec["label"] for source_id, spec in SIGNAL_SOURCES.items()}
 
 
 def _get_con() -> duckdb.DuckDBPyConnection:
@@ -71,107 +174,232 @@ def _get_con() -> duckdb.DuckDBPyConnection:
 
 # ── RKI Data Fetching ────────────────────────────────────────────────────────
 def fetch_rki_raw() -> pd.DataFrame:
-    """
-    Download the full RKI AMELAG TSV and cache in DuckDB.
-    Returns raw DataFrame with all columns.
-    """
+    """Download default RKI AMELAG dataset and cache in DuckDB."""
+    return fetch_rki_raw_dataset(RKI_DEFAULT_DATASET)
+
+
+def fetch_rki_raw_dataset(dataset_id: str = RKI_DEFAULT_DATASET) -> pd.DataFrame:
+    """Download a specific RKI source and cache it in-memory."""
+    if dataset_id not in RKI_DATASET_URLS:
+        raise ValueError(f"Unknown dataset id: {dataset_id}")
+
+    if dataset_id in _RAW_CACHE and not _RAW_CACHE[dataset_id].empty:
+        return _RAW_CACHE[dataset_id]
+
     try:
-        logger.info("Fetching RKI AMELAG data …")
-        resp = requests.get(RKI_AMELAG_URL, timeout=REQUEST_TIMEOUT)
+        logger.info("Fetching RKI dataset (%s) …", dataset_id)
+        resp = requests.get(RKI_DATASET_URLS[dataset_id], timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
 
-        raw_df = pd.read_csv(io.StringIO(resp.text), sep="\t", low_memory=False)
+        url = RKI_DATASET_URLS[dataset_id].lower()
+        sep = "\t" if url.endswith(".tsv") else ","
+        raw_df = pd.read_csv(io.StringIO(resp.text), sep=sep, low_memory=False)
 
-        con = _get_con()
-        con.execute("DROP TABLE IF EXISTS amelag_raw")
-        con.execute("CREATE TABLE amelag_raw AS SELECT * FROM raw_df")
+        if dataset_id in AMELAG_DATASET_IDS:
+            con = _get_con()
+            con.execute(f"DROP TABLE IF EXISTS {dataset_id}_raw")
+            con.execute(f"CREATE TABLE {dataset_id}_raw AS SELECT * FROM raw_df")
 
-        logger.info("RKI raw data loaded: %d rows", len(raw_df))
+        _RAW_CACHE[dataset_id] = raw_df
+        logger.info("RKI %s data loaded: %d rows", dataset_id, len(raw_df))
         return raw_df
-
     except Exception as exc:
-        logger.warning("RKI download failed (%s).", exc)
+        logger.warning("RKI download for %s failed (%s).", dataset_id, exc)
         return pd.DataFrame()
 
 
-def get_available_pathogens(raw_df: pd.DataFrame) -> List[str]:
-    """Return list of pathogen group names available in the data."""
-    if raw_df.empty or "typ" not in raw_df.columns:
-        return list(PATHOGEN_GROUPS.keys())
+def get_available_pathogens(raw_df: pd.DataFrame, dataset_id: str = RKI_DEFAULT_DATASET) -> List[str]:
+    """Return list of pathogen names that can be selected for the dataset."""
+    if dataset_id in AMELAG_DATASET_IDS:
+        if raw_df.empty or "typ" not in raw_df.columns:
+            return AMELAG_PATHOGEN_DEFAULT
 
-    available_types = set(raw_df["typ"].dropna().unique())
-    result = []
-    for group_name, type_list in PATHOGEN_GROUPS.items():
-        if any(t in available_types for t in type_list):
-            result.append(group_name)
-    return result
+        available_types = set(raw_df["typ"].dropna().unique())
+        result: List[str] = []
+        for group_name, type_list in PATHOGEN_GROUPS.items():
+            if any(t in available_types for t in type_list):
+                result.append(group_name)
+        return result
+
+    return _NON_AMELAG_DEFAULT_PATHOGENS.get(dataset_id, ["Gesamtsignal"])
+
+
+def _extract_amelag_signal(raw_df: pd.DataFrame, pathogen: str) -> pd.DataFrame:
+    if raw_df.empty or "typ" not in raw_df.columns or "datum" not in raw_df.columns:
+        raise ValueError("AMELAG dataset missing expected columns")
+
+    if "viruslast" not in raw_df.columns:
+        raise ValueError("AMELAG dataset missing viruslast")
+
+    type_values = PATHOGEN_GROUPS.get(pathogen, [pathogen])
+    if not type_values:
+        type_values = [pathogen]
+
+    df = raw_df[raw_df["typ"].isin(type_values)].copy()
+    if df.empty:
+        raise ValueError(f"No data for pathogen: {pathogen}")
+
+    df["date"] = pd.to_datetime(df["datum"], errors="coerce")
+    df["virus_load"] = pd.to_numeric(df["viruslast"], errors="coerce")
+    out = df.dropna(subset=["date", "virus_load"]).groupby("date", as_index=False)["virus_load"].sum()
+    out["pathogen"] = pathogen
+    return out.sort_values("date").reset_index(drop=True)
+
+
+def _extract_covid_signal(raw_df: pd.DataFrame, pathogen: str = "COVID-19") -> pd.DataFrame:
+    if raw_df.empty or "Meldedatum" not in raw_df.columns:
+        raise ValueError("COVID dataset missing expected date column")
+
+    df = raw_df.copy()
+    if "Altersgruppe" in df.columns:
+        all_mask = df["Altersgruppe"].astype(str).str.contains("00+", na=False)
+        if all_mask.any():
+            df = df[all_mask]
+
+    if "Faelle_7-Tage" in df.columns:
+        value_col = "Faelle_7-Tage"
+    elif "Inzidenz_7-Tage" in df.columns:
+        value_col = "Inzidenz_7-Tage"
+    elif "Faelle_neu" in df.columns:
+        value_col = "Faelle_neu"
+    else:
+        raise ValueError("COVID dataset missing value column")
+
+    df["date"] = pd.to_datetime(df["Meldedatum"], errors="coerce")
+    df["virus_load"] = _to_numeric_series(df[value_col])
+    out = df.dropna(subset=["date", "virus_load"]).groupby("date", as_index=False)["virus_load"].sum()
+    out["pathogen"] = pathogen
+    return out.sort_values("date").reset_index(drop=True)
+
+
+def _extract_weekly_signal(
+    raw_df: pd.DataFrame,
+    date_col: str,
+    value_col: str,
+    pathogen: str,
+) -> pd.DataFrame:
+    if raw_df.empty or date_col not in raw_df.columns or value_col not in raw_df.columns:
+        raise ValueError("Weekly dataset missing required columns")
+
+    df = raw_df.copy()
+    df["date"] = df[date_col].apply(_normalize_date_input)
+    df["virus_load"] = _to_numeric_series(df[value_col])
+    out = df.dropna(subset=["date", "virus_load"]).groupby("date", as_index=False)["virus_load"].sum()
+    out["pathogen"] = pathogen
+    return out.sort_values("date").reset_index(drop=True)
+
+
+def _extract_grippeweb_signal(raw_df: pd.DataFrame) -> pd.DataFrame:
+    df = raw_df.copy()
+    if "Region" in df.columns:
+        bundesweit = df["Region"].astype(str).str.contains("bundesweit|deutschland", case=False, na=False)
+        if bundesweit.any():
+            df = df[bundesweit]
+    if "Altersgruppe" in df.columns:
+        age_mask = df["Altersgruppe"].astype(str).str.contains("00+", na=False)
+        if age_mask.any():
+            df = df[age_mask]
+    return _extract_weekly_signal(df, "Kalenderwoche", "Inzidenz", "Grippe")
+
+
+def _extract_are_signal(raw_df: pd.DataFrame) -> pd.DataFrame:
+    df = raw_df.copy()
+    if "Bundesland" in df.columns:
+        bundesweit = df["Bundesland"].astype(str).str.contains("bundesweit", case=False, na=False)
+        if bundesweit.any():
+            df = df[bundesweit]
+    return _extract_weekly_signal(df, "Kalenderwoche", "ARE_Konsultationsinzidenz", "ARE")
+
+
+def _extract_influenzafaelle_signal(raw_df: pd.DataFrame) -> pd.DataFrame:
+    df = raw_df.copy()
+    if "Region" in df.columns:
+        deutschland = df["Region"].astype(str).str.contains("deutschland", case=False, na=False)
+        if deutschland.any():
+            df = df[deutschland]
+    if "Altersgruppe" in df.columns:
+        age_mask = df["Altersgruppe"].astype(str).str.contains("00+", na=False)
+        if age_mask.any():
+            df = df[age_mask]
+    return _extract_weekly_signal(df, "Meldewoche", "Inzidenz", "Influenza")
+
+
+def _extract_polio_signal(raw_df: pd.DataFrame) -> pd.DataFrame:
+    if "Datum" not in raw_df.columns or "Virusisolate" not in raw_df.columns:
+        raise ValueError("Polio dataset missing expected columns")
+    df = raw_df.copy()
+    df["date"] = df["Datum"].apply(_normalize_date_input)
+    df["virus_load"] = _to_numeric_series(df["Virusisolate"])
+    out = df.dropna(subset=["date", "virus_load"]).groupby("date", as_index=False)["virus_load"].sum()
+    out["pathogen"] = "Poliovirus"
+    return out.sort_values("date").reset_index(drop=True)
 
 
 def fetch_rki_wastewater(
     raw_df: Optional[pd.DataFrame] = None,
     pathogen: str = "SARS-CoV-2",
+    dataset_id: str = RKI_DEFAULT_DATASET,
 ) -> pd.DataFrame:
     """
-    Aggregate national virus-load by date for a specific pathogen group.
+    Aggregate a signal by date for a specific dataset/pathogen.
     Falls back to synthetic data if download/parsing fails.
     """
     try:
         if raw_df is None or raw_df.empty:
-            raw_df = fetch_rki_raw()
+            raw_df = fetch_rki_raw_dataset(dataset_id)
 
         if raw_df.empty:
             raise ValueError("No raw data available")
 
-        con = _get_con()
+        if dataset_id in AMELAG_DATASET_IDS:
+            agg_df = _extract_amelag_signal(raw_df, pathogen)
+        elif dataset_id == "rki_covid_7tage_inzidenz":
+            agg_df = _extract_covid_signal(raw_df, "COVID-19")
+        elif dataset_id == "rki_grippeweb_wochenbericht":
+            agg_df = _extract_grippeweb_signal(raw_df)
+        elif dataset_id == "rki_are_konsultationsinzidenz":
+            agg_df = _extract_are_signal(raw_df)
+        elif dataset_id == "rki_influenzafaelle":
+            agg_df = _extract_influenzafaelle_signal(raw_df)
+        elif dataset_id == "rki_polio_wa":
+            agg_df = _extract_polio_signal(raw_df)
+        else:
+            raise ValueError(f"Unknown dataset id: {dataset_id}")
 
-        # Get the typ values for this pathogen group
-        type_values = PATHOGEN_GROUPS.get(pathogen, [pathogen])
-        if not type_values:
-            type_values = [pathogen]
-        placeholders = ", ".join(["?"] * len(type_values))
-
-        agg_df = con.execute(
-            f"""
-            SELECT
-                TRY_CAST(datum AS DATE) AS date,
-                SUM(TRY_CAST(viruslast AS DOUBLE)) AS virus_load
-            FROM amelag_raw
-            WHERE TRY_CAST(datum AS DATE) IS NOT NULL
-              AND TRY_CAST(viruslast AS DOUBLE) IS NOT NULL
-              AND typ IN ({placeholders})
-            GROUP BY TRY_CAST(datum AS DATE)
-            ORDER BY date
-            """,
-            type_values,
-        ).fetchdf()
-
-        agg_df["date"] = pd.to_datetime(agg_df["date"])
-        agg_df = agg_df.dropna(subset=["virus_load"])
-        agg_df = agg_df.sort_values("date").reset_index(drop=True)
-        agg_df["pathogen"] = pathogen
-
+        agg_df["date"] = pd.to_datetime(agg_df["date"], errors="coerce")
+        agg_df["virus_load"] = pd.to_numeric(agg_df["virus_load"], errors="coerce")
+        agg_df = agg_df.dropna(subset=["date", "virus_load"])
         if agg_df.empty:
-            raise ValueError(f"No data for pathogen: {pathogen}")
+            raise ValueError("No parsed data rows")
 
-        logger.info("RKI %s data: %d rows", pathogen, len(agg_df))
-        return agg_df
+        return agg_df.sort_values("date").reset_index(drop=True)
 
     except Exception as exc:
-        logger.warning("RKI fetch for %s failed (%s). Using synthetic.", pathogen, exc)
+        logger.warning(
+            "RKI fetch for dataset=%s pathogen=%s failed (%s). Using synthetic.",
+            dataset_id,
+            pathogen,
+            exc,
+        )
         df = _generate_synthetic_wastewater()
         df["pathogen"] = pathogen
         return df
 
 
-def fetch_all_pathogens(raw_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-    """Fetch aggregated wastewater data for ALL pathogen groups. Returns combined DF."""
+def fetch_all_pathogens(
+    raw_df: Optional[pd.DataFrame] = None,
+    dataset_id: str = RKI_DEFAULT_DATASET,
+) -> pd.DataFrame:
+    """Fetch aggregated signals for all pathogen groups for a dataset."""
     if raw_df is None or raw_df.empty:
-        raw_df = fetch_rki_raw()
+        raw_df = fetch_rki_raw_dataset(dataset_id)
+
+    if dataset_id not in AMELAG_DATASET_IDS:
+        raise ValueError("fetch_all_pathogens is only valid for AMELAG datasets")
 
     frames = []
     for pathogen in PATHOGEN_GROUPS:
-        df = fetch_rki_wastewater(raw_df, pathogen)
-        frames.append(df)
+        frames.append(fetch_rki_wastewater(raw_df, pathogen=pathogen, dataset_id=dataset_id))
 
     return pd.concat(frames, ignore_index=True)
 
