@@ -778,7 +778,6 @@ def dashboard_page() -> None:
                     icon="menu",
                     on_click=control_drawer.toggle,
                     color=None,
-                    dense=True,
                 ).props("flat")
                 ui.label("Dashboard").classes("text-2xl lp-title")
                 ui.space()
