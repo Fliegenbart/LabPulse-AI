@@ -88,7 +88,6 @@ body::before {
 .lp-control-grid .q-input,
 .lp-control-grid .q-select,
 .lp-control-grid .q-toggle,
-.lp-control-grid .q-input,
 .lp-control-grid .q-slider {
     min-width: 0;
 }
@@ -146,6 +145,10 @@ body::before {
     overflow: hidden;
 }
 
+.lp-hero-panel {
+    min-height: 470px;
+}
+
 .lp-panel.lp-glow-strong {
     box-shadow: 0 22px 60px rgba(56, 189, 248, 0.14), 0 24px 54px rgba(2, 8, 23, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
 }
@@ -196,6 +199,9 @@ body::before {
     border-right: 1px solid var(--lp-border) !important;
     backdrop-filter: blur(14px) saturate(160%);
     box-shadow: 0 30px 70px rgba(2, 6, 23, 0.5);
+    width: min(30vw, 420px);
+    max-width: min(30vw, 420px);
+    min-width: 300px;
 }
 
 .lp-drawer .q-drawer__content {
@@ -240,12 +246,16 @@ body::before {
     border-radius: 10px !important;
 }
 
-.q-field__control {
+.lp-input .q-field--outlined .q-field__control,
+.lp-input .q-field--standout .q-field__control,
+.lp-input .q-field--filled .q-field__control {
     border-radius: 8px !important;
     background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(148, 163, 184, 0.12) !important;
+    box-shadow: none !important;
 }
 
-.q-field__control:before {
+.lp-input .q-field__control:before {
     border-bottom: none !important;
     border-top: none !important;
     border-left: none !important;
@@ -254,6 +264,10 @@ body::before {
 
 .lp-switch .q-toggle__inner {
     color: var(--lp-accent) !important;
+}
+
+.lp-switch .q-toggle__thumb {
+    color: #0b1220 !important;
 }
 
 .q-slider__track,

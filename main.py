@@ -373,54 +373,12 @@ def dashboard_body() -> None:
             ).classes("w-full lp-input").props("borderless dense")
             ui.switch("ML-Engine", value=state.use_prophet, on_change=lambda e: _set_prophet(e.value)).classes("lp-switch")
 
-    with ui.row().classes("w-full grid grid-cols-1 md:grid-cols-4 gap-4 lp-kpi-grid mt-3"):
-        _kpi_card(
-            "Revenue 7 Tage",
-            _fmt_eur(float(state.kpis.get("revenue_forecast_7d", 0))),
-            f"{state.kpis.get('trend_pct', 0):+.1f}% WoW",
-            "text-cyan-100",
-            "md:col-span-2 lp-glow-strong lp-reveal lp-delay-2",
-        )
-        _kpi_card(
-            "Risikopotenzial",
-            _fmt_eur(float(state.kpis.get("risk_eur", 0.0))),
-            "Unterdeckungsrisiko bei Bestandslücken",
-            "text-rose-200" if float(state.kpis.get("risk_eur", 0.0)) > 0 else "text-emerald-200",
-            ("lg:border-red-400/30" if float(state.kpis.get("risk_eur", 0.0)) > 0 else "") + " lp-reveal lp-delay-3",
-        )
-        stock_level = int(state.kpis.get("stock_on_hand", state.stock_level))
-        avg_daily = float(state.kpis.get("predicted_tests_7d", 0.0)) / 7 if state.kpis.get("predicted_tests_7d") else 0
-        coverage = int(stock_level / max(avg_daily, 1))
-        _kpi_card(
-            "Bestandsabdeckung",
-            f"{coverage} Tage",
-            f"{stock_level:,} Tests im Bestand".replace(",", "."),
-            "text-sky-100",
-            "lp-reveal lp-delay-4",
-        )
-        _kpi_card(
-            "Peak FTE",
-            f"{int(state.kpis.get('predicted_peak', 0) / max(1, state.tests_per_fte))}",
-            "max. benötigte FTE pro Tag",
-            "text-violet-100",
-            "lp-reveal lp-delay-5",
-        )
-
-    with ui.card().classes("lp-card q-pa-sm lp-surface lp-reveal lp-delay-6"):
-        with ui.row().classes("w-full items-center gap-3 flex-wrap"):
-            ui.label("Signal- und Modell-Setup").classes("lp-chip")
-            ui.separator().classes("lp-separator")
-        ui.space()
-        ui.chip("Engine: " + ("Prophet" if state.use_prophet else "Rule-Based")).classes("lp-chip lp-chip-emph")
-        if state.model_info.get("confidence") is not None:
-            ui.chip(f"Confidence {state.model_info['confidence']:.0f}%").classes("lp-chip")
-
     with ui.row().classes("w-full grid grid-cols-1 xl:grid-cols-5 gap-4 mt-2"):
-        with ui.card().classes("lp-card q-pa-sm xl:col-span-3 lp-panel lp-reveal lp-delay-7 lp-glass-panel"):
-            ui.label("Forecast, Trend und Bestellimpuls").classes("lp-title")
+        with ui.card().classes("lp-card q-pa-sm xl:col-span-3 lp-panel lp-hero-panel lp-reveal lp-delay-2 lp-glass-panel"):
+            ui.label("Forecast, Trends & Bestellimpuls").classes("lp-title")
             ui.plotly(_build_chart()).classes("w-full mt-2")
         with ui.column().classes("xl:col-span-2 gap-3"):
-            with ui.card().classes("lp-card flex-1 lp-panel lp-reveal lp-delay-8 lp-glass-panel"):
+            with ui.card().classes("lp-card flex-1 lp-panel lp-reveal lp-delay-3 lp-glass-panel"):
                 with ui.row().classes("items-center justify-between"):
                     ui.label("Decision Loop").classes("text-lg lp-title")
                     ui.label(state.ai_backend or "bereit").classes("text-xs lp-muted")
@@ -428,7 +386,7 @@ def dashboard_body() -> None:
                     ui.markdown(state.ai_summary).classes("lp-muted")
                 else:
                     ui.label("Noch keine KI-Einschätzung. Bitte Decision Loop starten.").classes("text-xs lp-muted")
-            with ui.card().classes("lp-card lp-panel lp-reveal lp-delay-8 lp-glass-panel"):
+            with ui.card().classes("lp-card lp-panel lp-reveal lp-delay-4 lp-glass-panel"):
                 ui.label("Google Trends (Kernausschnitt)").classes("text-lg lp-title")
                 if state.trend_df.empty:
                     ui.label("Noch keine Trendsignale verfügbar.").classes("text-xs lp-muted")
@@ -448,6 +406,39 @@ def dashboard_body() -> None:
                         rows=rows,
                         row_key="Datum",
                     ).classes("w-full lp-table")
+
+    with ui.row().classes("w-full grid grid-cols-1 md:grid-cols-4 gap-4 lp-kpi-grid mt-3"):
+        _kpi_card(
+            "Revenue 7 Tage",
+            _fmt_eur(float(state.kpis.get("revenue_forecast_7d", 0))),
+            f"{state.kpis.get('trend_pct', 0):+.1f}% WoW",
+            "text-cyan-100",
+            "md:col-span-2 lp-glow-strong lp-reveal lp-delay-5",
+        )
+        _kpi_card(
+            "Risikopotenzial",
+            _fmt_eur(float(state.kpis.get("risk_eur", 0.0))),
+            "Unterdeckungsrisiko bei Bestandslücken",
+            "text-rose-200" if float(state.kpis.get("risk_eur", 0.0)) > 0 else "text-emerald-200",
+            ("lg:border-red-400/30" if float(state.kpis.get("risk_eur", 0.0)) > 0 else "") + " lp-reveal lp-delay-6",
+        )
+        stock_level = int(state.kpis.get("stock_on_hand", state.stock_level))
+        avg_daily = float(state.kpis.get("predicted_tests_7d", 0.0)) / 7 if state.kpis.get("predicted_tests_7d") else 0
+        coverage = int(stock_level / max(avg_daily, 1))
+        _kpi_card(
+            "Bestandsabdeckung",
+            f"{coverage} Tage",
+            f"{stock_level:,} Tests im Bestand".replace(",", "."),
+            "text-sky-100",
+            "lp-reveal lp-delay-7",
+        )
+        _kpi_card(
+            "Peak FTE",
+            f"{int(state.kpis.get('predicted_peak', 0) / max(1, state.tests_per_fte))}",
+            "max. benötigte FTE pro Tag",
+            "text-violet-100",
+            "lp-reveal lp-delay-8",
+        )
 
     tabs = ui.tabs().classes("lp-reveal lp-delay-9")
     with tabs:
@@ -607,7 +598,7 @@ def dashboard_page() -> None:
         fixed=True,
         bordered=False,
         elevated=False,
-    ).props("overlay").classes("lp-drawer").style("width: min(30vw, 420px); max-width: 420px; min-width: 300px;") as control_drawer:
+    ).props("overlay").classes("lp-drawer") as control_drawer:
         ui.label("Steuerzentrum").classes("text-lg lp-title")
         ui.label("Lager-, Signalkontext, Modellsteuerung").classes("lp-muted")
         ui.separator()
@@ -641,29 +632,22 @@ def dashboard_page() -> None:
         ui.button("AI Entscheidungslogik", icon="auto_awesome", on_click=_run_decision).classes("w-full mt-2 lp-action").props("unelevated")
 
     with ui.row().classes("lp-wrap items-center gap-2 mt-1"):
+        ui.button(
+            icon="menu",
+            on_click=lambda: control_drawer.toggle(),
+        ).props("flat")
+        ui.label("Dashboard").classes("text-2xl lp-title")
         ui.space()
         ui.button("Dashboard aktualisieren", icon="autorenew", on_click=_rebuild_and_refresh).classes("lp-action").props("unelevated")
         ui.button("Decision Loop", icon="auto_awesome", on_click=_run_decision).classes("lp-action").props("unelevated")
         ui.button("PDF exportieren", icon="picture_as_pdf", on_click=_download_pdf).classes("lp-action").props("outline unelevated")
         ui.label(f"Update: {state.refreshed_at or '—'}").classes("text-xs lp-muted")
 
-        with ui.row().classes("items-center gap-2"):
-            ui.label(f"{state.pathogen} · {get_signal_source_label(state.signal_source)}").classes("lp-muted")
-            ui.label(f"{state.company_name} · {state.facility_name}").classes("lp-muted")
+        ui.label(f"{state.pathogen} · {get_signal_source_label(state.signal_source)}").classes("lp-muted")
+        ui.label(f"{state.company_name} · {state.facility_name}").classes("lp-muted")
 
     with ui.row().classes("lp-wrap"):
         with ui.column().classes("w-full gap-3"):
-            with ui.row().classes("w-full items-center"):
-                ui.button(
-                    icon="menu",
-                    on_click=control_drawer.toggle,
-                    color=None,
-                ).props("flat")
-                ui.label("Dashboard").classes("text-2xl lp-title")
-                ui.space()
-                ui.chip("ML-First Flow").classes("lp-chip")
-                ui.chip("App-ready").classes("lp-chip")
-
             dashboard_body()
 
     dashboard_body.refresh()
