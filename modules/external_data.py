@@ -11,12 +11,14 @@ All data is returned as weekly time-series aligned to ISO calendar weeks.
 
 import io
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+import time
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,11 @@ ARE_KONSULTATION_URL = (
     "ARE-Konsultationsinzidenz.tsv"
 )
 
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 12
+RETRY_TOTAL = 2
+RETRY_BACKOFF = 0.6
+RETRY_STATUS_FORCELIST = [429, 500, 502, 503, 504]
+USER_AGENT = "LabPulse AI/2.0 (+https://github.com/Fliegenbart/LabPulse-AI)"
 
 # Mapping of pathogen names to Google Trends search terms (German)
 PATHOGEN_SEARCH_TERMS: Dict[str, List[str]] = {
@@ -43,6 +49,51 @@ PATHOGEN_SEARCH_TERMS: Dict[str, List[str]] = {
     "Influenza (gesamt)": ["Grippe Symptome", "Grippeimpfung", "Grippe Test"],
     "RSV": ["RSV Baby", "RSV Symptome", "Bronchiolitis"],
 }
+
+
+def _build_http_session() -> requests.Session:
+    """Create HTTP session with conservative retry policy."""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=RETRY_TOTAL,
+        connect=RETRY_TOTAL,
+        read=RETRY_TOTAL,
+        status=RETRY_TOTAL,
+        backoff_factor=RETRY_BACKOFF,
+        status_forcelist=RETRY_STATUS_FORCELIST,
+        allowed_methods={"GET"},
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.headers.update({"User-Agent": USER_AGENT})
+    return session
+
+
+_HTTP_SESSION = _build_http_session()
+
+
+def _fetch_text_with_retry(url: str, timeout: int = REQUEST_TIMEOUT) -> str:
+    """Fetch text from URL with retry policy and explicit logging."""
+    response = _HTTP_SESSION.get(url, timeout=timeout)
+    response.raise_for_status()
+    return response.text
+
+
+def _run_with_retries(fn, attempts: int = 3, base_delay: float = 0.8):
+    """Simple retry wrapper for non-requests exceptions (pytrends etc.)."""
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except Exception as exc:  # pragma: no cover - defensive
+            last_error = exc
+            if attempt == attempts - 1:
+                raise
+            time.sleep(base_delay * (2 ** attempt))
+    if last_error:
+        raise last_error
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -80,10 +131,9 @@ def fetch_grippeweb(
     """
     try:
         logger.info("Fetching GrippeWeb data …")
-        resp = requests.get(GRIPPEWEB_URL, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
+        content = _fetch_text_with_retry(GRIPPEWEB_URL)
 
-        df = pd.read_csv(io.StringIO(resp.text), sep="\t", low_memory=False)
+        df = pd.read_csv(io.StringIO(content), sep="\t", low_memory=False)
         logger.info("GrippeWeb raw: %d rows", len(df))
 
         # Filter
@@ -143,10 +193,9 @@ def fetch_are_konsultation(
     """
     try:
         logger.info("Fetching ARE-Konsultationsinzidenz …")
-        resp = requests.get(ARE_KONSULTATION_URL, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
+        content = _fetch_text_with_retry(ARE_KONSULTATION_URL)
 
-        df = pd.read_csv(io.StringIO(resp.text), sep="\t", low_memory=False)
+        df = pd.read_csv(io.StringIO(content), sep="\t", low_memory=False)
         logger.info("ARE raw: %d rows", len(df))
 
         # Filter
@@ -186,9 +235,8 @@ def fetch_are_konsultation(
 def fetch_are_by_bundesland(altersgruppe: str = "00+") -> pd.DataFrame:
     """Fetch ARE data for ALL Bundeslaender (for regional map overlay)."""
     try:
-        resp = requests.get(ARE_KONSULTATION_URL, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        df = pd.read_csv(io.StringIO(resp.text), sep="\t", low_memory=False)
+        content = _fetch_text_with_retry(ARE_KONSULTATION_URL)
+        df = pd.read_csv(io.StringIO(content), sep="\t", low_memory=False)
 
         if "Altersgruppe" in df.columns:
             df = df[df["Altersgruppe"] == altersgruppe]
@@ -294,7 +342,10 @@ def fetch_google_trends(
         pytrends = TrendReq(hl="de-DE", tz=60, timeout=(10, 25))
         pytrends.build_payload(keywords, cat=0, timeframe=timeframe, geo=geo)
 
-        df = pytrends.interest_over_time()
+        def _request():
+            return pytrends.interest_over_time()
+
+        df = _run_with_retries(_request, attempts=3, base_delay=0.7)
 
         if df.empty:
             logger.warning("Google Trends returned no data for: %s", keywords)

@@ -5,10 +5,13 @@ Configurable alert system with webhook (Slack/Teams compatible)
 and optional email notifications.
 """
 
-import json
 import logging
 import os
 import smtplib
+import ssl
+import re
+import ipaddress
+from urllib.parse import urlparse
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -25,6 +28,78 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "alerts@labpulse.ai")
 WEBHOOK_TIMEOUT = 10
+WEBHOOK_SCHEMES = {"https", "http"}
+_webhook_allowlist_env = os.getenv(
+    "LABPULSE_WEBHOOK_ALLOW_DOMAINS",
+    "slack.com,api.slack.com,hooks.slack.com,teams.microsoft.com,office.com,outlook.office.com",
+)
+WEBHOOK_DOMAIN_ALLOWLIST = {
+    entry.strip().lower()
+    for entry in _webhook_allowlist_env.split(",")
+    if entry.strip()
+}
+
+
+def _is_public_host(hostname: str) -> bool:
+    if not hostname:
+        return False
+    normalized = hostname.lower().strip(".")
+    if normalized in {"localhost", "localhost.localdomain", "::1"}:
+        return False
+
+    try:
+        ip = ipaddress.ip_address(normalized)
+    except ValueError:
+        pass
+    else:
+        return not (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_reserved
+            or ip.is_unspecified
+            or ip.is_multicast
+        )
+
+    if normalized.endswith(".localhost") or normalized.endswith(".local"):
+        return False
+
+    return True
+
+
+def _host_in_allowlist(hostname: str) -> bool:
+    if not WEBHOOK_DOMAIN_ALLOWLIST:
+        return True
+
+    host = hostname.lower().lstrip(".")
+    for allowed in WEBHOOK_DOMAIN_ALLOWLIST:
+        if host == allowed or host.endswith(f".{allowed}"):
+            return True
+    return False
+
+
+def _is_valid_webhook_url(url: str) -> bool:
+    try:
+        parsed = urlparse((url or "").strip())
+        scheme_ok = parsed.scheme in WEBHOOK_SCHEMES
+        host = (parsed.hostname or "").lower()
+        return (
+            scheme_ok
+            and bool(parsed.netloc)
+            and _is_public_host(host)
+            and _host_in_allowlist(host)
+        )
+    except Exception:
+        return False
+
+
+def is_valid_webhook_url(url: str) -> bool:
+    return _is_valid_webhook_url(url)
+
+
+def _is_valid_email_address(email: str) -> bool:
+    if not isinstance(email, str) or not email.strip():
+        return False
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email.strip()))
 
 
 class AlertRule:
@@ -148,7 +223,9 @@ class AlertManager:
         """
         if not url or not alerts:
             return False
-
+        if not _is_valid_webhook_url(url):
+            logger.warning("Invalid webhook URL rejected: %s", (url or "")[:40])
+            return False
         try:
             # Format for Slack-compatible webhook
             text = (
@@ -167,6 +244,9 @@ class AlertManager:
             logger.warning("Webhook failed: %s", exc)
             return False
 
+    def is_webhook_url_valid(self, url: str) -> bool:
+        return _is_valid_webhook_url(url)
+
     def send_email(
         self,
         to_email: str,
@@ -177,7 +257,13 @@ class AlertManager:
         Send alerts via SMTP email.
         Returns True on success.
         """
-        if not SMTP_SERVER or not SMTP_USER or not to_email or not alerts:
+        if (
+            not SMTP_SERVER
+            or not SMTP_USER
+            or not to_email
+            or not alerts
+            or not _is_valid_email_address(to_email)
+        ):
             return False
 
         try:
@@ -205,8 +291,8 @@ class AlertManager:
             msg.attach(MIMEText(body_text, "plain"))
             msg.attach(MIMEText(body_html, "html"))
 
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-                server.starttls()
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=WEBHOOK_TIMEOUT) as server:
+                server.starttls(context=ssl.create_default_context())
                 server.login(SMTP_USER, SMTP_PASS)
                 server.send_message(msg)
 

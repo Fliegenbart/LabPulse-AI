@@ -6,7 +6,6 @@ insights about dashboard data. Falls back to rule-based German
 commentary when Ollama is unreachable.
 """
 
-import json
 import logging
 import os
 from typing import Optional

@@ -8,7 +8,7 @@ unavailable or training fails.
 
 import logging
 import time
-from typing import Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -50,6 +50,8 @@ class LabVolumeForecaster:
         self.is_trained = False
         self.training_time = 0.0
         self.model_type = "simple"  # or "prophet"
+        self.n_features = 0
+        self.training_days = 0
         self._confidence_score = 0.0
 
     def prepare_training_data(self) -> pd.DataFrame:
@@ -84,6 +86,8 @@ class LabVolumeForecaster:
         if not _prophet_available():
             logger.info("Prophet not installed — using simple forecast")
             self.model_type = "simple"
+            self.training_days = len(self.lab_df) if not self.lab_df.empty else 0
+            self.n_features = len(self.prepare_training_data().columns) if not self.lab_df.empty else 0
             self.is_trained = True
             self._confidence_score = 50.0
             return self
@@ -98,6 +102,8 @@ class LabVolumeForecaster:
             if len(train_df) < 30:
                 logger.warning("Not enough data for Prophet (%d rows), using simple", len(train_df))
                 self.model_type = "simple"
+                self.training_days = len(train_df)
+                self.n_features = train_df.shape[1]
                 self.is_trained = True
                 self._confidence_score = 40.0
                 return self
@@ -130,6 +136,8 @@ class LabVolumeForecaster:
             self.model = model
             self.model_type = "prophet"
             self.is_trained = True
+            self.training_days = len(train_df)
+            self.n_features = train_df.shape[1]
 
             # Calculate confidence score based on training data size and time
             data_score = min(100, len(train_df) / 3)  # 300+ rows → 100
@@ -145,6 +153,8 @@ class LabVolumeForecaster:
         except Exception as exc:
             logger.warning("Prophet training failed: %s — falling back to simple", exc)
             self.model_type = "simple"
+            self.training_days = len(self.lab_df) if not self.lab_df.empty else 0
+            self.n_features = len(self.prepare_training_data().columns) if not self.lab_df.empty else 0
             self.is_trained = True
             self._confidence_score = 40.0
             return self
@@ -244,4 +254,6 @@ class LabVolumeForecaster:
             "training_time_s": round(self.training_time, 2),
             "confidence_score": self._confidence_score,
             "pathogen": self.pathogen,
+            "n_features": self.n_features,
+            "training_days": self.training_days,
         }

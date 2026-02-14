@@ -6,8 +6,6 @@ operationally clear visual hierarchy for decision-making.
 """
 
 import streamlit as st
-import os
-from urllib.parse import urlparse
 
 st.set_page_config(
     page_title="Home",
@@ -40,24 +38,9 @@ if _open_target in {"dashboard", "1_Dashboard", "Dashboard", "1_dashboard"} or _
 
 
 
-def _normalize_public_url(raw_url: str) -> str:
-    base = (raw_url or "").strip().rstrip("/")
-    if not base:
-        return ""
-    parsed = urlparse(base)
-    if parsed.scheme in {"http", "https"}:
-        base = parsed.path or ""
-    return base
-
-
-_dashboard_public_url = _normalize_public_url(os.getenv("LABPULSE_PUBLIC_URL", ""))
-_dashboard_open_url = (
-    f"{_dashboard_public_url}/dashboard" if _dashboard_public_url else "/dashboard"
-).rstrip("/")
+_dashboard_open_url = "/Dashboard"
 
 st.markdown("""<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=IBM+Plex+Mono:wght@500;700&display=swap');
-
 :root {
     --lp-bg: #f4f8fc;
     --lp-surface: #ffffff;
@@ -65,39 +48,64 @@ st.markdown("""<style>
     --lp-accent: #ea580c;
     --lp-accent-bright: #f97316;
     --lp-accent-soft: rgba(234, 88, 12, 0.10);
+    --lp-accent-soft-strong: rgba(234, 88, 12, 0.22);
     --lp-text: #0f172a;
     --lp-text-soft: #334155;
     --lp-text-muted: #64748b;
     --lp-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
     --lp-shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.05);
+    --lp-shadow-hero: 0 16px 34px rgba(15, 23, 42, 0.12);
+    --lp-glass-bg: rgba(255, 255, 255, 0.56);
+    --lp-glass-border: rgba(255, 255, 255, 0.58);
     --lp-radius: 16px;
+    --lp-radius-sm: 12px;
     --signal-teal: #0284c7;
     --signal-violet: #2563eb;
     --signal-rose: #ef4444;
     --signal-lime: #16a34a;
-    --font-display: 'Manrope', sans-serif;
-    --font-body: 'Inter', sans-serif;
-    --font-mono: 'IBM Plex Mono', monospace;
+    --font-display: "SF Pro Display", "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SF Mono", "Menlo", "Consolas", "Monaco", "IBM Plex Mono", monospace;
 }
 
 /* ── Reset & Global ──────────────────────────────────────── */
 
-#MainMenu, footer, header[data-testid="stHeader"] { display: none !important; }
+#MainMenu, footer, header[data-testid="stHeader"], [data-testid="stDecoration"], [data-testid="stHeader"], .stToolbar { display: none !important; }
 [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] { display: none !important; }
 
-html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text); color-scheme: light; }
+html, body, [class*="css"] {
+    font-family: var(--font-body);
+    color: var(--lp-text);
+    color-scheme: light;
+    background-color: var(--lp-bg) !important;
+    margin: 0;
+    padding: 0;
+}
 
 .stApp {
     background:
-        radial-gradient(circle at 10% -8%, rgba(234, 88, 12, 0.10), transparent 40%),
-        radial-gradient(circle at 88% 2%, rgba(37, 99, 235, 0.08), transparent 42%),
+        radial-gradient(circle at 10% -8%, rgba(234, 88, 12, 0.11), transparent 40%),
+        radial-gradient(circle at 88% 2%, rgba(37, 99, 235, 0.06), transparent 42%),
         var(--lp-bg) !important;
     color: var(--lp-text) !important;
+    background-color: var(--lp-bg) !important;
     overflow-x: hidden;
 }
 
 .stApp::before, .stApp::after { content: none !important; }
-.block-container { padding: 0 !important; max-width: 100% !important; }
+.block-container {
+    padding: 0rem 1.05rem 0.25rem !important;
+    max-width: 100% !important;
+}
+
+[data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}
+
+.stApp > header, .stApp > .main { margin-top: 0 !important; }
+div[data-testid="stAppViewContainer"] > section.main { padding-top: 0 !important; }
+div[data-testid="stAppViewContainer"] > section.main > div:first-child { margin-top: 0 !important; }
 
 .lp-bg, .lp-bg::before, .lp-bg::after { display: none !important; }
 .lp-page { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; background: transparent; }
@@ -112,11 +120,16 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 
 .lp-nav {
     display: flex; justify-content: space-between; align-items: center;
-    position: sticky; top: 0; z-index: 15;
-    padding: 0.15rem 3.2rem 0.22rem;
-    backdrop-filter: blur(14px);
-    background: rgba(255, 255, 255, 0.86);
-    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    position: relative;
+    top: 0;
+    z-index: 15;
+    margin: 0;
+    padding: 0.1rem 1.1rem 0.1rem;
+    backdrop-filter: blur(14px) saturate(175%);
+    background: linear-gradient(110deg, var(--lp-glass-bg), rgba(255, 255, 255, 0.25));
+    border-bottom: 0;
+    border-top: 0;
+    line-height: 1;
     animation: fadeDown 0.7s ease-out both;
 }
 
@@ -138,13 +151,38 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 .lp-hero {
     flex: 1; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center;
-    padding: 0.35rem 2rem 0.75rem; min-height: auto;
+    justify-content: flex-start;
+    padding: 0.12rem 1.1rem 0.34rem; min-height: auto;
+}
+
+.lp-value-row {
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0 auto 0.34rem;
+    max-width: 1100px;
+    padding: 0 1.25rem;
+}
+
+.lp-value-chip {
+    border-radius: 999px;
+    border: 1px solid rgba(234, 88, 12, 0.12);
+    background: var(--lp-glass-bg);
+    backdrop-filter: blur(10px);
+    color: var(--lp-text-soft);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 0.42rem 0.74rem;
+    white-space: nowrap;
 }
 
 .lp-eyebrow {
     font-family: var(--font-mono); font-size: 0.65rem; font-weight: 600;
     color: var(--lp-accent); letter-spacing: 0.24em; text-transform: uppercase;
-    margin-bottom: 1rem;
+    margin-bottom: 0.74rem;
     animation: fadeUp 0.6s ease-out 0.15s both;
 }
 
@@ -152,7 +190,7 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
     font-family: var(--font-display);
     font-size: clamp(2.0rem, 6vw, 3.5rem); font-weight: 700;
     color: var(--lp-text); line-height: 1.05;
-    margin: 0.05rem auto 0.18rem; max-width: 980px;
+    margin: 0.02rem auto 0.16rem; max-width: 980px;
     letter-spacing: -0.045em;
     animation: fadeUp 0.8s ease-out 0.3s both;
 }
@@ -171,68 +209,30 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 
 .lp-hero-line {
     width: 80px; height: 1px; background: var(--lp-accent);
-    margin: 0.68rem auto 0.7rem; opacity: 0.6;
+    margin: 0.58rem auto 0.58rem; opacity: 0.58;
     animation: lineExpand 0.8s ease-out 0.5s both;
 }
 
 .lp-hero-sub {
     font-family: var(--font-body);
-    font-size: clamp(0.88rem, 1.4vw, 1.05rem); font-weight: 400;
+    font-size: clamp(0.84rem, 1.26vw, 0.99rem); font-weight: 400;
     color: var(--lp-text-soft); max-width: 640px;
-    margin: 0 auto 0.55rem; line-height: 1.5;
+    margin: 0 auto 0.44rem; line-height: 1.44;
+    max-width: 600px;
     animation: fadeUp 0.7s ease-out 0.6s both;
-}
-
-/* ── Journey ─────────────────────────────────────────────── */
-
-.lp-journey {
-    padding: 2rem 3.2rem 1.5rem;
-    max-width: 1100px; margin: 0 auto;
-}
-
-.lp-journey-head { text-align: center; margin-bottom: 2.1rem; }
-
-.lp-journey-head h2 {
-    font-family: var(--font-display);
-    font-size: clamp(1.6rem, 3.4vw, 2.5rem);
-    font-weight: 700; color: var(--lp-text); margin: 0;
-    letter-spacing: -0.025em;
-}
-
-.lp-journey-head p { color: var(--lp-text-soft); margin: 0.85rem auto 0; max-width: 620px; font-size: 0.92rem; }
-
-.lp-journey-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-
-.lp-journey-item {
-    background: linear-gradient(165deg, #fff, rgba(255,255,255,0.9));
-    border: 1px solid var(--lp-line); border-radius: var(--lp-radius);
-    padding: 1.1rem 1rem;
-    box-shadow: var(--lp-shadow-soft);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.lp-journey-item:hover { transform: translateY(-2px); box-shadow: var(--lp-shadow); }
-.lp-journey-item h3 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; color: var(--lp-text); }
-.lp-journey-item p { margin: 0.5rem 0 0; color: var(--lp-text-soft); font-size: 0.84rem; }
-
-.lp-journey-step {
-    width: 2rem; height: 2rem; border-radius: 999px;
-    display: inline-flex; align-items: center; justify-content: center;
-    margin-bottom: 0.6rem; font-weight: 700; color: #fff;
-    background: linear-gradient(135deg, var(--lp-accent), var(--lp-accent-bright));
 }
 
 /* ── CTA ─────────────────────────────────────────────────── */
 
 .lp-cta-row {
-    display: flex; gap: 0.7rem; margin-top: 0.6rem;
+    display: flex; gap: 0.6rem; margin-top: 0.35rem;
     flex-wrap: nowrap; justify-content: center;
     animation: fadeUp 0.7s ease-out 0.75s both;
 }
 
 .lp-btn {
     font-family: var(--font-body); font-size: 0.82rem; font-weight: 700;
-    padding: 0.68rem 1.35rem; border-radius: 12px;
+    padding: 0.6rem 1.12rem; border-radius: 12px;
     text-decoration: none; border: 1px solid transparent;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -240,14 +240,17 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 .lp-btn-fill {
     color: #fff !important;
     background: linear-gradient(135deg, var(--lp-accent-bright), var(--lp-accent));
-    box-shadow: 0 16px 36px rgba(234, 88, 12, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 30px rgba(234, 88, 12, 0.24);
 }
 
 .lp-btn-fill:hover { transform: translateY(-2px); box-shadow: 0 20px 40px rgba(234, 88, 12, 0.28); color: #fff; }
 
 .lp-btn-ghost {
     color: var(--lp-text-soft) !important; border-color: rgba(15, 23, 42, 0.16);
-    background: transparent;
+    background: var(--lp-glass-bg);
+    backdrop-filter: blur(10px);
 }
 
 .lp-btn-ghost:hover { border-color: var(--lp-accent); color: var(--lp-text) !important; }
@@ -256,21 +259,33 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 
 .lp-stats {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.2rem; padding: 1.7rem 1.35rem;
+    gap: 0.82rem; padding: 1.16rem 1.25rem 1.04rem;
     animation: fadeUp 0.7s ease-out 0.9s both;
 }
 
 .lp-stat {
     text-align: center;
-    background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.9));
-    border: 1px solid var(--lp-line); border-radius: var(--lp-radius);
+    background: linear-gradient(180deg, var(--lp-glass-bg), rgba(255, 255, 255, 0.52));
+    border: 1px solid var(--lp-glass-border);
+    backdrop-filter: blur(12px);
+    border-radius: var(--lp-radius);
     padding: 1.2rem 1rem 0.95rem;
-    box-shadow: var(--lp-shadow);
+    box-shadow: var(--lp-shadow-soft);
 }
 
 .lp-stat-num {
     font-family: var(--font-display); font-size: 2.6rem; font-weight: 900;
     color: var(--lp-text); line-height: 1; letter-spacing: -0.03em; white-space: nowrap;
+}
+
+.lp-number,
+.lp-stat-num,
+.lp-card-big-num,
+.lp-hero-sub,
+.lp-card h3,
+.lp-card p {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
 .lp-stat-num span { color: var(--lp-accent); }
@@ -298,10 +313,12 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 .lp-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem; }
 
 .lp-card {
-    background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.88));
-    border: 1px solid var(--lp-line); border-radius: var(--lp-radius);
+    background: linear-gradient(165deg, var(--lp-glass-bg), rgba(255, 255, 255, 0.52));
+    border: 1px solid var(--lp-glass-border);
+    backdrop-filter: blur(14px);
+    border-radius: var(--lp-radius);
     padding: 2rem; position: relative; overflow: hidden;
-    box-shadow: var(--lp-shadow);
+    box-shadow: var(--lp-shadow-soft);
     transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
@@ -339,7 +356,7 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 
 /* ── Signal Pills ────────────────────────────────────────── */
 
-.lp-pills { padding: 1.7rem 1.35rem 3rem; text-align: center; }
+.lp-pills { padding: 1.5rem 1.35rem 2.2rem; text-align: center; }
 
 .lp-pills h2 {
     font-family: var(--font-display); font-size: 2rem; font-weight: 700;
@@ -353,7 +370,8 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 
 .lp-pill {
     display: flex; align-items: center; gap: 0.6rem;
-    background: #fff; border: 1px solid #dbeafe;
+    background: var(--lp-glass-bg); border: 1px solid #dbeafe;
+    backdrop-filter: blur(8px);
     border-radius: 999px; padding: 0.62rem 1.1rem;
     transition: all 0.25s ease;
 }
@@ -376,12 +394,11 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 /* ── Responsive ──────────────────────────────────────────── */
 
 @media (max-width: 980px) {
-    .lp-nav { position: static; padding: 0.6rem 1.4rem; }
-    .lp-hero { padding: 0.8rem 1.4rem 0.75rem; }
+    .lp-nav { position: static; padding: 0.08rem 1.05rem; }
+    .lp-hero { padding: 0.02rem 1rem 0.34rem; }
     .lp-hero h1 { font-size: clamp(2rem, 8vw, 3rem); }
-    .lp-journey { padding: 1.5rem 1.4rem 1rem; }
-    .lp-journey-grid { grid-template-columns: 1fr; }
-    .lp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 1.4rem; padding-right: 1.4rem; }
+    .lp-value-row { gap: 0.5rem; }
+    .lp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 1.12rem; padding-right: 1.12rem; }
     .lp-sect, .lp-pills, .lp-foot { padding-left: 1.4rem; padding-right: 1.4rem; }
     .lp-grid { grid-template-columns: 1fr; }
     .lp-c-7, .lp-c-5, .lp-c-4, .lp-c-8, .lp-c-6 { grid-column: span 1; }
@@ -391,7 +408,8 @@ html, body, [class*="css"] { font-family: var(--font-body); color: var(--lp-text
 
 @media (max-width: 640px) {
     .lp-stats { grid-template-columns: 1fr; }
-    .lp-nav { padding: 0.5rem 1.2rem; }
+    .lp-nav { padding: 0.06rem 0.75rem; }
+    .lp-hero-sub { max-width: 95%; }
 }
 </style>""", unsafe_allow_html=True)
 
@@ -422,28 +440,10 @@ st.markdown("""
     </div>
 </section>
 
-<section class="lp-journey" id="prozess">
-    <div class="lp-journey-head">
-        <h2>Drei Schritte zur Entscheidungssicherheit</h2>
-        <p>Schnell vom Signal zur Handlung: ein klarer, auditierbarer Workflow.</p>
-    </div>
-    <div class="lp-journey-grid">
-        <div class="lp-journey-item">
-            <div class="lp-journey-step">1</div>
-            <h3>KPIs prüfen</h3>
-            <p>Gesamtlage, Signalqualität und Engpassrisiko in den nächsten 7 Tagen auf einen Blick.</p>
-        </div>
-        <div class="lp-journey-item">
-            <div class="lp-journey-step">2</div>
-            <h3>Prognose lesen</h3>
-            <p>Signalverlauf, Unsicherheit und ML-Korrekturkurve visuell vergleichen.</p>
-        </div>
-        <div class="lp-journey-item">
-            <div class="lp-journey-step">3</div>
-            <h3>Handlung ableiten</h3>
-            <p>Empfehlung, Bericht und Freigabe-Pfad direkt für die operative Entscheidung.</p>
-        </div>
-    </div>
+<section class="lp-value-row">
+    <div class="lp-value-chip">Frühwarnung</div>
+    <div class="lp-value-chip">Vorhersage mit Konfidenz</div>
+    <div class="lp-value-chip">Entscheidung in Minuten</div>
 </section>
 
 <section class="lp-stats">
@@ -467,79 +467,28 @@ st.markdown("""
 
 <section class="lp-sect" id="features">
     <div class="lp-sect-head">
-        <h2>Alles in <strong>einem Dashboard.</strong></h2>
-        <p>Vier Datenquellen. Ein Konfidenz-Score. Klare Handlungsempfehlungen.</p>
+        <h2>Weniger Klicks. Mehr Klarheit.</h2>
+        <p>Alle wichtigen Signale für die operative Planung an einem Ort.</p>
     </div>
     <div class="lp-grid">
-        <div class="lp-card lp-c-7">
+        <article class="lp-card lp-c-7">
             <span class="lp-card-tag lp-tag-violet">Machine Learning</span>
-            <h3>ML-Prognose mit Konfidenzband</h3>
-            <p>Prophet-Zeitreihenmodell mit externer Signal-Einbindung auf historischen Patterns.
-            Das lila Konfidenzband zeigt Unsicherheit transparent &mdash;
-            damit Sie wissen, wie belastbar die Vorhersage ist.</p>
-        </div>
-        <div class="lp-card lp-c-5" style="display:flex;flex-direction:column;">
-            <span class="lp-card-tag lp-tag-copper">Konfidenz</span>
-            <h3>Signal-Fusion</h3>
-            <p>Vier unabh&auml;ngige Quellen gewichtet zu einem Score.</p>
-            <div class="lp-card-big-num">69.2%</div>
-        </div>
-        <div class="lp-card lp-c-5">
-            <span class="lp-card-tag lp-tag-teal">KI-Analyse</span>
-            <h3>LLM-gest&uuml;tzte Interpretation</h3>
-            <p>Lokale KI (Ollama) analysiert Trends, vergleicht Signale
-            und liefert handlungsrelevante Empfehlungen in nat&uuml;rlicher Sprache.</p>
-        </div>
-        <div class="lp-card lp-c-7">
-            <span class="lp-card-tag lp-tag-teal">Korrelation</span>
-            <h3>Abwasser ↔ Laborvolumen</h3>
-            <p>Viruslast korreliert mit Testbedarf &mdash; 14 Tage vorher.
-            Interaktiver Chart mit Zoom, Range-Slider und Prognose-Overlay.</p>
-        </div>
-        <div class="lp-card lp-c-4">
-            <span class="lp-card-tag lp-tag-lime">Bestand</span>
-            <h3>Reichweite &amp; Nachbestellung</h3>
-            <p>Echtzeit-Reichweite pro Testkit mit automatischer Warnung bei Engpass.</p>
-        </div>
-        <div class="lp-card lp-c-4">
-            <span class="lp-card-tag lp-tag-rose">Regional</span>
-            <h3>16 Bundesl&auml;nder</h3>
-            <p>Hotspots erkennen, bevor sie das Laborvolumen treiben.</p>
-        </div>
-        <div class="lp-card lp-c-4">
-            <span class="lp-card-tag lp-tag-copper">Trends</span>
-            <h3>Google Suchinteresse</h3>
-            <p>Bev&ouml;lkerungsbewusstsein als Fr&uuml;hindikator f&uuml;r Testbedarf.</p>
-        </div>
+            <h3>ML-Prognose mit Konfidenz</h3>
+            <p>Wetter, Abwasser, Labor und Nachfrage als gemeinsam lernende Signale.</p>
+        </article>
+        <article class="lp-card lp-c-5">
+            <span class="lp-card-tag lp-tag-copper">Entscheidung</span>
+            <h3>Klare Handlungslogik</h3>
+            <p>Klare Ampellogik von Risiko, Trend und Bestandsauswirkung für schnelle Entscheidungen.</p>
+        </article>
+        <article class="lp-card lp-c-5">
+            <span class="lp-card-tag lp-tag-teal">Relevanz</span>
+            <h3>Regulatorischer Kontext</h3>
+            <p>Berichte, Freigabeketten und nachvollziehbare Modell-Einstellungen on demand.</p>
+        </article>
     </div>
 </section>
 
-<section class="lp-pills" id="signals">
-    <h2>Vier Signale. <strong>Eine Wahrheit.</strong></h2>
-    <p>Jede Datenquelle hat St&auml;rken und Schw&auml;chen. Zusammen ergibt sich ein klares Bild.</p>
-    <div class="lp-pill-row">
-        <div class="lp-pill">
-            <div class="lp-pill-dot" style="background:var(--signal-teal);"></div>
-            <span class="lp-pill-name">Abwasser (AMELAG)</span>
-            <span class="lp-pill-wt">45%</span>
-        </div>
-        <div class="lp-pill">
-            <div class="lp-pill-dot" style="background:var(--signal-violet);"></div>
-            <span class="lp-pill-name">GrippeWeb</span>
-            <span class="lp-pill-wt">25%</span>
-        </div>
-        <div class="lp-pill">
-            <div class="lp-pill-dot" style="background:var(--signal-lime);"></div>
-            <span class="lp-pill-name">ARE-Konsultation</span>
-            <span class="lp-pill-wt">20%</span>
-        </div>
-        <div class="lp-pill">
-            <div class="lp-pill-dot" style="background:var(--accent);"></div>
-            <span class="lp-pill-name">Google Trends</span>
-            <span class="lp-pill-wt">10%</span>
-        </div>
-    </div>
-</section>
 
 <footer class="lp-foot">
     <span>LabPulse AI v2.0</span>
@@ -547,4 +496,4 @@ st.markdown("""
 </footer>
 
 </div>
-""".replace("@@LP_DASHBOARD_URL@@", _dashboard_public_url).replace("@@LP_DASHBOARD_OPEN@@", _dashboard_open_url), unsafe_allow_html=True)
+""".replace("@@LP_DASHBOARD_OPEN@@", _dashboard_open_url), unsafe_allow_html=True)

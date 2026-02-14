@@ -7,7 +7,6 @@ table, and optional AI commentary. Uses reportlab for minimal dependencies.
 
 import io
 import logging
-import tempfile
 from datetime import datetime
 from typing import Optional
 

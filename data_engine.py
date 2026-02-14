@@ -27,7 +27,7 @@ LAB_SCALE_MAX = 2000
 AVG_REVENUE_PER_TEST = 45  # €
 DEFAULT_LAG_DAYS = 14
 NOISE_FACTOR = 0.10  # ±10 %
-REQUEST_TIMEOUT = 30  # seconds
+REQUEST_TIMEOUT = 12  # seconds
 
 # Pathogen display names and grouping
 PATHOGEN_GROUPS: Dict[str, List[str]] = {
@@ -126,7 +126,9 @@ def fetch_rki_wastewater(
 
         # Get the typ values for this pathogen group
         type_values = PATHOGEN_GROUPS.get(pathogen, [pathogen])
-        type_list_sql = ", ".join(f"'{t}'" for t in type_values)
+        if not type_values:
+            type_values = [pathogen]
+        placeholders = ", ".join(["?"] * len(type_values))
 
         agg_df = con.execute(
             f"""
@@ -136,10 +138,11 @@ def fetch_rki_wastewater(
             FROM amelag_raw
             WHERE TRY_CAST(datum AS DATE) IS NOT NULL
               AND TRY_CAST(viruslast AS DOUBLE) IS NOT NULL
-              AND typ IN ({type_list_sql})
+              AND typ IN ({placeholders})
             GROUP BY TRY_CAST(datum AS DATE)
             ORDER BY date
-            """
+            """,
+            type_values,
         ).fetchdf()
 
         agg_df["date"] = pd.to_datetime(agg_df["date"])
@@ -186,6 +189,56 @@ def _generate_synthetic_wastewater(days: int = 365) -> pd.DataFrame:
     virus_load = np.abs(base * noise)
 
     return pd.DataFrame({"date": dates, "virus_load": virus_load})
+
+
+def _prepare_lab_data_for_forecast(
+    lab_df: pd.DataFrame,
+    pathogen: str,
+) -> Tuple[pd.DataFrame, int]:
+    """
+    Normalize lab history for deterministic forecast logic.
+
+    Returns
+    -------
+    (prepared_df, cost_per_test)
+    """
+    if lab_df is None or lab_df.empty:
+        return pd.DataFrame(), PATHOGEN_REAGENT_MAP.get(pathogen, {}).get("cost_per_test", AVG_REVENUE_PER_TEST)
+
+    prepared = lab_df.copy()
+    prepared["date"] = pd.to_datetime(prepared["date"], errors="coerce")
+    prepared["order_volume"] = pd.to_numeric(prepared["order_volume"], errors="coerce")
+    prepared = prepared.dropna(subset=["date", "order_volume"]).sort_values("date")
+
+    if prepared.empty:
+        return pd.DataFrame(), PATHOGEN_REAGENT_MAP.get(pathogen, {}).get("cost_per_test", AVG_REVENUE_PER_TEST)
+
+    cost_per_test = PATHOGEN_REAGENT_MAP.get(pathogen, {}).get(
+        "cost_per_test", AVG_REVENUE_PER_TEST
+    )
+    if "revenue" not in prepared.columns:
+        prepared["revenue"] = prepared["order_volume"] * cost_per_test
+
+    prepared = prepared.groupby("date", as_index=False).agg(
+        order_volume=("order_volume", "sum"),
+        revenue=("revenue", "sum"),
+    )
+
+    if prepared.empty:
+        return pd.DataFrame(), cost_per_test
+
+    date_idx = pd.date_range(prepared["date"].min(), prepared["date"].max(), freq="D")
+    prepared = prepared.set_index("date").reindex(date_idx)
+    prepared.index.name = "date"
+
+    prepared["order_volume"] = prepared["order_volume"].interpolate(limit_direction="both")
+    if prepared["order_volume"].isna().all():
+        prepared["order_volume"] = prepared["order_volume"].fillna(0)
+    prepared["order_volume"] = prepared["order_volume"].clip(lower=0).round().astype(int)
+    prepared["revenue"] = prepared["order_volume"] * cost_per_test
+    prepared["pathogen"] = pathogen
+    prepared = prepared.reset_index().rename(columns={"index": "date"})
+    return prepared, cost_per_test
 
 
 # ── Lab Volume Synthesis ─────────────────────────────────────────────────────
@@ -252,35 +305,63 @@ def build_forecast(
     Pathogen-aware cost-per-test.
     """
     today = pd.Timestamp(datetime.today()).normalize()
-    cost_per_test = PATHOGEN_REAGENT_MAP.get(pathogen, {}).get("cost_per_test", AVG_REVENUE_PER_TEST)
+    prepared_df, cost_per_test = _prepare_lab_data_for_forecast(lab_df, pathogen)
+    if prepared_df.empty:
+        empty_dates = pd.date_range(today, periods=horizon_days, freq="D")
+        forecast_df = pd.DataFrame({
+            "Date": empty_dates,
+            "Predicted Volume": [0] * horizon_days,
+            "Reagent Order": [0] * horizon_days,
+            f"Est. Revenue (€{cost_per_test}/test)": [0] * horizon_days,
+        })
+        return forecast_df, {
+            "predicted_tests_7d": 0,
+            "revenue_forecast_7d": 0,
+            "reagent_status": "No data ❌",
+            "trend_pct": 0.0,
+            "stock_on_hand": stock_on_hand,
+            "total_demand": 0,
+            "risk_eur": 0,
+            "stockout_day": None,
+            "remaining_stock": [stock_on_hand] * horizon_days,
+            "cost_per_test": cost_per_test,
+            "test_name": PATHOGEN_REAGENT_MAP.get(pathogen, {}).get("test_name", "Generic PCR Kit"),
+            "pathogen": pathogen,
+        }
+
+    lab_df = prepared_df
     test_name = PATHOGEN_REAGENT_MAP.get(pathogen, {}).get("test_name", "Generic PCR Kit")
 
-    # Split actuals / future
     actuals = lab_df[lab_df["date"] <= today].copy()
     future = lab_df[lab_df["date"] > today].head(horizon_days).copy()
 
-    # Extrapolate if needed
     if len(future) < horizon_days:
         last_window = actuals.tail(14)
         if last_window.empty:
             last_window = lab_df.tail(14)
+
         mean_vol = int(last_window["order_volume"].mean()) if not last_window.empty else 500
         std_vol = int(last_window["order_volume"].std()) if len(last_window) > 1 else 50
+        if std_vol < 1:
+            std_vol = 50
+
         extra_dates = pd.date_range(
-            start=today + timedelta(days=1), periods=horizon_days, freq="D",
+            start=today + timedelta(days=1),
+            periods=horizon_days,
+            freq="D",
         )
         np.random.seed(99)
         extra_vols = np.random.normal(mean_vol, std_vol, size=horizon_days).astype(int)
         extra_vols = np.maximum(extra_vols, 20)
+
         future = pd.DataFrame({
             "date": extra_dates,
             "order_volume": extra_vols,
             "revenue": extra_vols * cost_per_test,
         })
 
-    forecast = future.head(horizon_days).copy()
+    forecast = future.head(horizon_days).copy().sort_values("date")
 
-    # Scenario simulation
     if scenario_uplift_pct > 0:
         forecast["order_volume"] = (forecast["order_volume"] * (1 + scenario_uplift_pct)).astype(int)
         forecast["revenue"] = forecast["order_volume"] * cost_per_test
@@ -289,11 +370,11 @@ def build_forecast(
         forecast["order_volume"] * (1 + safety_buffer_pct)
     ).astype(int)
 
-    # Day-by-day stock drawdown
     orders = []
     remaining_stock = []
     current_stock = stock_on_hand
     stockout_day = None
+
     for i, demand in enumerate(forecast["buffered_volume"]):
         if current_stock < demand:
             needed = demand - current_stock
@@ -310,14 +391,12 @@ def build_forecast(
     forecast["remaining_stock"] = remaining_stock
     forecast["est_revenue"] = forecast["order_volume"] * cost_per_test
 
-    # KPIs
     pred_7d = int(forecast.head(7)["order_volume"].sum())
     rev_7d = pred_7d * cost_per_test
     total_demand_horizon = int(forecast["buffered_volume"].sum())
 
     shortage = max(0, total_demand_horizon - stock_on_hand)
     risk_eur = shortage * cost_per_test
-
     reagent_status = "Optimal ✅" if stock_on_hand >= total_demand_horizon else "Critical ⚠️"
 
     last_7 = actuals.tail(7)["order_volume"].sum()

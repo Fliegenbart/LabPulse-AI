@@ -9,7 +9,7 @@ choropleth map visualization. Uses Plotly's built-in choropleth
 import json
 import logging
 import os
-from typing import Dict, Optional
+from typing import Optional
 
 import pandas as pd
 
