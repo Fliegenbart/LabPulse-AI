@@ -56,7 +56,7 @@ def _synth_trend_series(anchor: pd.Series, days: int = 90) -> pd.DataFrame:
 
     rng = np.random.default_rng(11)
     base = float(anchor.mean())
-    season = 10 * pd.Series(np.sin(np.linspace(0, 3.1, days))
+    season = 10 * pd.Series(np.sin(np.linspace(0, 3.1, days)))
     noise = pd.Series(rng.normal(0, 6, size=days))
     dates = pd.date_range(pd.Timestamp.today().normalize() - pd.Timedelta(days=days - 1), periods=days, freq="D")
     score = (base + season + noise + 50).clip(lower=0, upper=100).round().astype(int)
