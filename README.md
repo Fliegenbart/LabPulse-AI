@@ -1,6 +1,6 @@
 # LabPulse AI
 
-LabPulse AI is a Streamlit dashboard for predictive lab-reagent planning based on
+LabPulse AI is a NiceGUI dashboard for predictive lab-reagent planning based on
 wastewater surveillance and complementary surveillance signals.
 
 ## Local setup
@@ -9,7 +9,7 @@ wastewater surveillance and complementary surveillance signals.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-streamlit run app.py
+python main.py
 ```
 
 ## What the app does
