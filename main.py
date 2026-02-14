@@ -711,7 +711,7 @@ def dashboard_page() -> None:
             ui.label(f"{state.company_name} · {state.facility_name}").classes("lp-muted")
 
     with ui.row().classes("lp-wrap"):
-        with ui.left_drawer(value=False, fixed=True, bordered=True, width=360).classes("lp-drawer") as control_drawer:
+        with ui.left_drawer(value=False, fixed=True, bordered=True).props("width=360 overlay").classes("lp-drawer") as control_drawer:
             ui.label("Steuerzentrum").classes("text-lg lp-title")
             ui.label("Lager-, Signalkontext, Modellsteuerung").classes("lp-muted")
             ui.separator()
