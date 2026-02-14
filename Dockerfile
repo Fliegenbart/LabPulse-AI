@@ -19,4 +19,4 @@ RUN mkdir -p /app/data
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+    CMD curl -f http://localhost:8080/dashboard/ || exit 1

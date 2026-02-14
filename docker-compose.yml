@@ -22,7 +22,7 @@ services:
     volumes:
       - labpulse-data:/app/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/dashboard/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
