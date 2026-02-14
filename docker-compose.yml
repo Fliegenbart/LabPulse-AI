@@ -1,6 +1,7 @@
 services:
-  labpulse:
+  labpulse-dashboard:
     build: .
+    image: labpulse-app:latest
     container_name: labpulse-ai
     restart: unless-stopped
     expose:
@@ -9,22 +10,29 @@ services:
     cpus: 2.0
     environment:
       - TZ=Europe/Berlin
+      - PYTHONPATH=/app
       - OLLAMA_HOST=http://controlling-ollama:11434
       - OLLAMA_MODEL=qwen2.5:7b
       - OLLAMA_TIMEOUT=30
-      - LABPULSE_PUBLIC_URL=https://5.9.106.75
+      - LABPULSE_PUBLIC_URL=https://labpulse.belegsync.com
+    entrypoint: ["python", "main.py"]
     networks:
       - default
       - controlling
     volumes:
       - labpulse-data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   labpulse-proxy:
     image: nginx:1.27-alpine
     container_name: labpulse-proxy
     restart: unless-stopped
     depends_on:
-      - labpulse
+      - labpulse-dashboard
     ports:
       - "8501:80"
     volumes:
