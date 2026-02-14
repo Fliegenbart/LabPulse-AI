@@ -86,9 +86,9 @@ div[data-testid="stAppViewContainer"] > section.main > div:first-child { margin-
     top: 0;
     z-index: 15;
     margin: 0;
-    padding: 0.22rem 1.1rem 0.18rem;
-    backdrop-filter: blur(20px) saturate(175%);
-    background: var(--lp-glass-bg);
+    padding: 0.32rem 1.1rem 0.1rem;
+    backdrop-filter: none;
+    background: transparent;
     border-bottom: 0;
     border-top: 0;
     line-height: 1;
