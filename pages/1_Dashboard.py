@@ -19,6 +19,8 @@ import io
 import zipfile
 import hmac
 import time
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 
 from data_engine import (
@@ -628,6 +630,18 @@ def _safe_text(value, fallback=""):
     return str(value)
 
 
+def _normalize_terms(terms: list[str] | tuple[str, ...] | None) -> tuple[str, ...]:
+    if not terms:
+        return tuple()
+    deduped: list[str] = []
+    for value in terms:
+        text = str(value or "").strip()
+        if not text or text in deduped:
+            continue
+        deduped.append(text)
+    return tuple(deduped[:5])
+
+
 def _perf_start() -> float:
     return time.perf_counter()
 
@@ -982,1165 +996,22 @@ def _record_operations_payload(path: str, payload: dict) -> dict:
 
 pio.templates.default = "plotly_white"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DESIGN SYSTEM — Single CSS block, light theme
-# ─────────────────────────────────────────────────────────────────────────────
-st.markdown("""<style>
-:root {
-    --lp-text: #111827;
-    --lp-text-soft: #334155;
-    --lp-text-muted: #526074;
-    --lp-line: #dbe4ef;
-    --lp-accent: #ea580c;
-    --lp-accent-soft: rgba(234, 88, 12, 0.10);
-    --lp-accent-soft-strong: rgba(234, 88, 12, 0.22);
-    --lp-success: #16a34a;
-    --lp-warning: #d97706;
-    --lp-danger: #dc2626;
-    --lp-surface: #ffffff;
-    --lp-surface-soft: #f8fafc;
-    --lp-bg: #f4f8fc;
-    --lp-glass-bg: rgba(255, 255, 255, 0.56);
-    --lp-glass-border: rgba(255, 255, 255, 0.64);
-    --lp-glass-shadow: 0 20px 44px rgba(15, 23, 42, 0.10);
-    --lp-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-    --lp-shadow-soft: 0 6px 18px rgba(15, 23, 42, 0.05);
-    --lp-radius: 14px;
-    --lp-radius-sm: 12px;
-    --lp-font: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    --lp-font-mono: "SF Mono", "Menlo", "Consolas", "Monaco", "IBM Plex Mono", monospace;
-    --lp-font-heading: "SF Pro Display", "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-}
+_PUBLIC_BASE_URL = os.getenv("LABPULSE_PUBLIC_URL", "").strip().rstrip("/")
 
-/* ── Global ──────────────────────────────────────────────────── */
 
-html, body, [class*="css"], .stApp {
-    font-family: var(--lp-font);
-    color: var(--lp-text);
-    color-scheme: light;
-    scrollbar-color: var(--lp-accent) #f1f5f9;
-    background-color: var(--lp-bg) !important;
-}
+def _public_url(path: str = "") -> str:
+    """Build app-local links without hard-coded relative routes."""
+    normalized = (path or "").strip()
+    if not normalized or normalized == "/":
+        return _PUBLIC_BASE_URL + "/" if _PUBLIC_BASE_URL else "/"
+    if not normalized.startswith("/"):
+        normalized = f"/{normalized}"
+    return f"{_PUBLIC_BASE_URL}{normalized}" if _PUBLIC_BASE_URL else normalized
 
-.stApp,
-.stApp > header,
-.stApp > div,
-.main .block-container {
-    background: transparent !important;
-}
 
-.stApp {
-    background:
-        radial-gradient(circle at 10% -10%, rgba(234, 88, 12, 0.08), transparent 32%),
-        radial-gradient(circle at 92% 0%, rgba(37, 99, 235, 0.04), transparent 36%),
-        var(--lp-bg) !important;
-    color: var(--lp-text) !important;
-    background-color: var(--lp-bg) !important;
-}
-
-.stApp::before,
-.stApp::after { content: none !important; }
-
-.block-container {
-    position: relative;
-    z-index: 1;
-    max-width: 1320px !important;
-    padding: 0.06rem 1.02rem 0.5rem !important;
-}
-
-/* ── Shell & Header ─────────────────────────────────────────── */
-
-.zen-shell {
-    border: 1px solid var(--lp-glass-border);
-    border-radius: var(--lp-radius);
-    backdrop-filter: blur(14px);
-    padding: 0.78rem 0.9rem;
-    background: linear-gradient(180deg, var(--lp-glass-bg) 0%, rgba(255, 255, 255, 0.74) 100%);
-    margin-bottom: 0.55rem;
-    box-shadow: var(--lp-glass-shadow);
-}
-
-.zen-kicker {
-    font-family: var(--lp-font-mono);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.26rem 0.65rem;
-    border: 1px solid var(--lp-accent-soft);
-    border-radius: 999px;
-    background: rgba(234, 88, 12, 0.14);
-    color: #7c2d12;
-    text-transform: uppercase;
-    letter-spacing: 0.055em;
-    font-size: 0.66rem;
-    font-weight: 700;
-    margin-bottom: 0.24rem;
-}
-
-.zen-header {
-    padding-bottom: 0.56rem;
-    margin-bottom: 0.48rem;
-    border-bottom: 1px solid var(--lp-line);
-}
-
-.zen-header h1 {
-    margin: 0 0 0.08rem 0;
-    font-family: var(--lp-font-heading);
-    font-size: 1.72rem;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1.12;
-}
-
-.zen-header span {
-    color: var(--lp-text);
-    font-size: 0.8rem;
-    font-weight: 700;
-    font-family: var(--lp-font-mono);
-}
-
-.zen-header-meta {
-    margin-top: 0.2rem;
-    color: var(--lp-text-muted);
-    font-size: 0.72rem;
-    line-height: 1.4;
-}
-
-.zen-body {
-    color: var(--lp-text-muted);
-    line-height: 1.55;
-    font-size: 0.84rem;
-}
-
-/* ── Breadcrumb / Topbar ────────────────────────────────────── */
-
-.zen-topbar { margin-bottom: 0.35rem; }
-
-.zen-topbar-shell {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    color: #475569;
-    font-family: var(--lp-font-mono);
-    font-size: 0.76rem;
-}
-
-.zen-home-link {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    border: 1px solid var(--lp-glass-border);
-    text-decoration: none;
-    color: #334155 !important;
-    background: var(--lp-glass-bg);
-    backdrop-filter: blur(8px);
-    transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
-    cursor: pointer;
-}
-
-.zen-home-link:hover { border-color: var(--lp-accent); color: var(--lp-accent) !important; }
-
-.zen-top-sep {
-    width: 5px;
-    height: 5px;
-    border-radius: 999px;
-    background: #cbd5e1;
-}
-
-.zen-breadcrumb {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.42rem;
-    padding: 0.2rem 0.25rem;
-    color: #64748b;
-    font-size: 0.74rem;
-    letter-spacing: 0.02em;
-}
-
-.zen-breadcrumb a {
-    color: #475569 !important;
-    text-decoration: none !important;
-    font-weight: 600;
-    border-radius: 999px;
-    border: 1px solid var(--lp-glass-border);
-    padding: 0.15rem 0.56rem;
-    background: var(--lp-glass-bg);
-    backdrop-filter: blur(8px);
-}
-
-.zen-breadcrumb a:hover {
-    border-color: var(--lp-accent);
-    color: var(--lp-accent) !important;
-}
-
-.zen-breadcrumb .crumb-sep {
-    width: 6px; height: 6px;
-    border-radius: 999px;
-    background: rgba(234, 88, 12, 0.28);
-    margin: 0 0.08rem;
-}
-
-.zen-inline-meta {
-    border: 1px solid var(--lp-glass-border);
-    border-radius: 999px;
-    background: var(--lp-glass-bg);
-    padding: 0.26rem 0.65rem;
-    color: #475569;
-    font-size: 0.74rem;
-}
-
-/* ── KPI Strip ──────────────────────────────────────────────── */
-
-.zen-kpi-strip {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.68rem;
-    margin: 0.2rem 0 0.95rem;
-}
-
-.zen-kpi {
-    border: 1px solid var(--lp-glass-border);
-    border-radius: var(--lp-radius-sm);
-    backdrop-filter: blur(8px);
-    padding: 0.85rem 0.9rem;
-    background: linear-gradient(180deg, var(--lp-glass-bg), rgba(255, 255, 255, 0.72));
-    box-shadow: var(--lp-shadow-soft);
-    min-height: 70px;
-    position: relative;
-    transition: box-shadow 0.2s ease;
-}
-
-.zen-kpi::after {
-    content: '';
-    position: absolute;
-    inset: auto 0 0;
-    height: 3px;
-    background: linear-gradient(90deg, transparent, var(--lp-accent), transparent);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.zen-kpi:hover { box-shadow: 0 12px 36px rgba(15, 23, 42, 0.10); }
-.zen-kpi:hover::after { opacity: 1; }
-
-.zen-kpi .val {
-    color: var(--lp-text);
-    font-family: var(--lp-font);
-    font-size: 1.32rem;
-    line-height: 1.1;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1, "lnum" 1;
-}
-
-.zen-kpi .lbl {
-    color: var(--lp-text-muted);
-    font-size: 0.71rem;
-    margin-top: 0.2rem;
-}
-
-.zen-kpi .delta.ok { color: var(--lp-success); }
-.zen-kpi .delta.warn { color: var(--lp-warning); }
-
-/* ── Quick Metrics ──────────────────────────────────────────── */
-
-.zen-summary-head {
-    font-family: var(--lp-font);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.055em;
-    color: #475569;
-    margin-bottom: 0.35rem;
-}
-
-.zen-quick-metric {
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(8px);
-    border-radius: var(--lp-radius-sm);
-    padding: 0.65rem 0.72rem;
-    background: var(--lp-glass-bg);
-}
-
-.zen-quick-metric [data-testid="stMetric"] label,
-.zen-quick-metric [data-testid="stMetricValue"] {
-    font-size: 0.86rem !important;
-}
-
-/* ── Risk Banner ────────────────────────────────────────────── */
-
-.zen-risk-banner {
-    border: 1px solid #fca5a5;
-    border-radius: var(--lp-radius-sm);
-    background: linear-gradient(180deg, rgba(254, 242, 242, 0.82), rgba(255, 255, 255, 0.54));
-    color: #991b1b;
-    backdrop-filter: blur(8px);
-    padding: 0.65rem 0.8rem;
-    margin-bottom: 0.6rem;
-}
-
-/* ── Bento Grid ─────────────────────────────────────────────── */
-
-.zen-bento-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.72rem;
-    margin: 0.2rem 0 0.8rem;
-}
-
-.zen-bento-card {
-    border: 1px solid var(--lp-glass-border);
-    background: var(--lp-glass-bg);
-    backdrop-filter: blur(10px);
-    border-radius: 13px;
-    padding: 0.78rem 0.85rem;
-    box-shadow: var(--lp-glass-shadow);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.zen-bento-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
-}
-
-.zen-bento-card h4 {
-    margin: 0 0 0.32rem 0;
-    color: var(--lp-text);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.045em;
-}
-
-.zen-bento-main { grid-column: span 2; }
-
-.zen-bento-kicker {
-    font-size: 0.71rem;
-    color: var(--lp-text-muted);
-    margin-bottom: 0.38rem;
-}
-
-.zen-mini {
-    font-family: var(--lp-font-mono);
-    font-size: 0.98rem;
-    font-weight: 700;
-    color: var(--lp-text);
-    margin-bottom: 0.06rem;
-}
-
-.zen-mini-sub {
-    color: var(--lp-text-muted);
-    font-size: 0.67rem;
-}
-
-/* ── Decision Urgency ───────────────────────────────────────── */
-
-.zen-decision-urgency {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.38rem;
-    border-radius: 999px;
-    padding: 0.18rem 0.58rem;
-    border: 1px solid rgba(234, 88, 12, 0.24);
-    background: rgba(234, 88, 12, 0.12);
-    font-size: 0.68rem;
-    font-weight: 700;
-}
-
-.zen-urgency-critical { color: #991b1b; background: #fee2e2; border-color: #fecaca; }
-.zen-urgency-high { color: #9a3412; background: #ffedd5; border-color: #fdba74; }
-.zen-urgency-medium { color: #854d0e; background: #fef3c7; border-color: #fcd34d; }
-.zen-urgency-low { color: #166534; background: #dcfce7; border-color: #86efac; }
-
-/* ── Flow Steps ─────────────────────────────────────────────── */
-
-.zen-flow {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.58rem;
-    margin: 0.25rem 0 0.9rem;
-}
-
-.zen-flow-step {
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(10px);
-    border-radius: var(--lp-radius-sm);
-    padding: 0.62rem 0.7rem;
-    background: var(--lp-glass-bg);
-    color: #45556d;
-    display: flex;
-    align-items: flex-start;
-    gap: 0.48rem;
-    font-size: 0.71rem;
-    line-height: 1.3;
-    transition: all 0.24s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.zen-flow-step:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
-    border-color: rgba(234, 88, 12, 0.42);
-}
-
-.zen-flow-step strong {
-    color: var(--lp-text);
-    font-size: 0.74rem;
-    display: inline-block;
-}
-
-.zen-flow-number {
-    width: 22px; height: 22px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    background: rgba(234, 88, 12, 0.16);
-    border: 1px solid var(--lp-accent-soft);
-    color: #9a3412;
-    font-weight: 700;
-    font-size: 0.64rem;
-}
-
-.zen-flow a, .zen-flow a:hover { color: inherit; text-decoration: none; }
-
-.zen-flow-note {
-    padding: 0.6rem 0.72rem;
-    margin: 0.35rem 0 0.75rem;
-    border-radius: 11px;
-    border: 1px solid var(--lp-glass-border);
-    background: linear-gradient(180deg, rgba(254, 251, 235, 0.8), rgba(255, 255, 255, 0.55));
-    color: #92400e;
-    backdrop-filter: blur(8px);
-    font-size: 0.78rem;
-}
-
-/* ── Step Strip ─────────────────────────────────────────────── */
-
-.zen-step-strip {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.55rem;
-    margin: 0.25rem 0 0.9rem;
-}
-
-.zen-step {
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(8px);
-    border-radius: var(--lp-radius-sm);
-    background: var(--lp-glass-bg);
-    padding: 0.58rem 0.7rem;
-    font-size: 0.74rem;
-    letter-spacing: 0.015em;
-    color: #334155;
-}
-
-.zen-step strong {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.3rem; height: 1.3rem;
-    border-radius: 999px;
-    background: rgba(234, 88, 12, 0.12);
-    color: #9a3412;
-    font-size: 0.7rem;
-    margin-right: 0.45rem;
-}
-
-.zen-section-head {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-family: var(--lp-font);
-    font-size: 0.74rem;
-    text-transform: uppercase;
-    letter-spacing: 0.055em;
-    color: #475569;
-    margin-bottom: 0.45rem;
-    margin-top: 0.25rem;
-}
-
-.zen-section-head::before {
-    content: "";
-    width: 0.8rem; height: 0.8rem;
-    border-radius: 999px;
-    background: var(--lp-accent);
-}
-
-/* ── Mode Badges & Notes ────────────────────────────────────── */
-
-.zen-mode-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    border-radius: 999px;
-    border: 1px solid var(--lp-accent-soft);
-    background: rgba(234, 88, 12, 0.10);
-    color: #1e293b;
-    padding: 0.24rem 0.68rem;
-    margin-bottom: 0.5rem;
-    font-weight: 700;
-    font-size: 0.68rem;
-}
-
-.zen-exec-note {
-    border-left: 3px solid var(--lp-accent);
-    border: 1px solid var(--lp-glass-border);
-    border-left: 3px solid var(--lp-accent);
-    border-radius: 0 var(--lp-radius-sm) var(--lp-radius-sm) 0;
-    padding: 0.7rem 0.9rem;
-    margin: 0.2rem 0 0.85rem;
-    color: #7c2d12;
-    background: linear-gradient(90deg, rgba(234, 88, 12, 0.14), rgba(255, 255, 255, 0.46));
-    box-shadow: var(--lp-shadow-soft);
-}
-
-.zen-alert {
-    margin: 0.6rem 0 0.9rem;
-    padding: 0.76rem 0.95rem;
-    border: 1px solid #fecaca;
-    border-left: 3px solid var(--lp-danger);
-    border-radius: var(--lp-radius);
-    background: #fef2f2;
-    color: #991b1b;
-    box-shadow: var(--lp-shadow-soft);
-}
-
-/* ── ML Row & Toolbar ───────────────────────────────────────── */
-
-.zen-ml-row {
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(8px);
-    border-radius: var(--lp-radius);
-    padding: 0.75rem 0.9rem;
-    margin: 0.45rem 0 0.85rem;
-    background: linear-gradient(180deg, var(--lp-glass-bg) 0%, rgba(255, 255, 255, 0.56) 100%);
-    box-shadow: var(--lp-shadow);
-    display: flex;
-    justify-content: space-between;
-    gap: 0.6rem;
-}
-
-.zen-ml-row .label { color: var(--lp-text); font-weight: 600; font-size: 0.85rem; }
-.zen-ml-row .sub { color: var(--lp-text-muted); font-size: 0.74rem; }
-
-.zen-ml-status {
-    padding: 0.55rem 0.7rem;
-    border: 1px solid var(--lp-glass-border);
-    border-radius: var(--lp-radius-sm);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), var(--lp-glass-bg));
-    backdrop-filter: blur(8px);
-    color: var(--lp-text);
-    line-height: 1.2;
-    font-size: 0.78rem;
-    flex: 1;
-}
-
-.zen-ml-status strong { color: var(--lp-text); }
-
-/* ── Chart ──────────────────────────────────────────────────── */
-
-.zen-chart {
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(10px);
-    border-radius: var(--lp-radius);
-    background: linear-gradient(180deg, var(--lp-glass-bg) 0%, rgba(255, 255, 255, 0.66) 100%);
-    box-shadow: var(--lp-glass-shadow);
-    overflow: hidden;
-}
-
-/* ── Shared Component Overrides ─────────────────────────────── */
-
-div[data-testid="stExpander"],
-div[data-testid="stMetric"],
-[data-testid="stDataFrame"] > div,
-div[data-testid="stTabPanel"] {
-    border: 1px solid var(--lp-glass-border);
-    background: var(--lp-glass-bg);
-    backdrop-filter: blur(10px);
-    border-radius: var(--lp-radius);
-    box-shadow: var(--lp-shadow-soft);
-}
-
-div[data-testid="stExpander"] { padding: 0.42rem 0.45rem 0.2rem; margin-top: 0.35rem; margin-bottom: 0.2rem; }
-div[data-testid="stExpander"] summary { font-weight: 600; font-size: 0.92rem; }
-
-div[data-testid="stMetric"] label { color: var(--lp-text-muted) !important; }
-div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-    color: var(--lp-text) !important;
-    font-family: var(--lp-font) !important;
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: "tnum" 1, "lnum" 1;
-}
-div[data-testid="stMetric"] [data-testid="stMetricDelta"] { font-family: var(--lp-font) !important; }
-div[data-testid="stMetric"] > div,
-[data-testid="stDataFrame"] > div > div { background: var(--lp-glass-bg); }
-
-div[data-testid="stPlotlyChart"] {
-    border: 1px solid var(--lp-glass-border);
-    border-radius: var(--lp-radius);
-    backdrop-filter: blur(8px);
-    background: var(--lp-glass-bg);
-}
-
-div[data-testid="stWidgetLabel"] { font-weight: 600; }
-
-/* ── Tabs ───────────────────────────────────────────────────── */
-
-div[data-testid="stTabs"] {
-    background: var(--lp-glass-bg);
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(8px);
-    border-radius: var(--lp-radius);
-    padding: 0.4rem 0.4rem 0;
-    margin-bottom: 1rem;
-    box-shadow: var(--lp-glass-shadow);
-}
-
-.stTabs [data-baseweb="tab-list"] { border-bottom: 1px solid var(--lp-line); padding: 0 0.15rem; }
-.stTabs [data-baseweb="tab"] { padding: 0.58rem 1rem; color: #64748b; border-radius: 10px 10px 0 0; }
-.stTabs [aria-selected="true"] { color: var(--lp-accent) !important; border-bottom: 2px solid var(--lp-accent) !important; background: var(--lp-accent-soft); }
-
-/* ── Buttons ────────────────────────────────────────────────── */
-
-.stButton > button,
-.stDownloadButton > button {
-    border-radius: 11px;
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(8px);
-    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
-    transition: all 0.2s ease;
-}
-
-.stButton > button:hover,
-.stDownloadButton > button:hover {
-    border-color: var(--lp-accent) !important;
-    color: #fff !important;
-    background: var(--lp-accent) !important;
-    transform: translateY(-1px);
-    box-shadow: 0 8px 22px rgba(234, 88, 12, 0.15);
-}
-
-[data-testid="baseButton-secondary"] { border-color: var(--lp-line); }
-
-/* ── Progress Bar ───────────────────────────────────────────── */
-
-[data-testid="stProgressBar"] > div { background-color: #e2e8f0; border-radius: 999px; }
-[data-testid="stProgressBar"] > div > div { background: linear-gradient(90deg, var(--lp-accent), var(--lp-accent-bright)); }
-
-/* ── Sidebar ────────────────────────────────────────────────── */
-
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, var(--lp-glass-bg), rgba(255, 255, 255, 0.8)) !important;
-    border-right: 1px solid var(--lp-glass-border) !important;
-}
-
-[data-testid="stSidebar"] .stMarkdown h1 {
-    color: var(--lp-accent) !important;
-    font-family: var(--lp-font-heading) !important;
-    font-size: 1rem !important;
-    font-weight: 700;
-}
-
-[data-testid="stSidebar"] .stButton > button { width: 100%; justify-content: flex-start; }
-
-.stSidebarNav, [data-testid="stSidebarNav"] { display: none !important; }
-[data-testid="stSidebar"] nav, section[data-testid="stSidebar"] nav { display: none !important; }
-
-.sidebar-label {
-    color: #4b5d76 !important;
-    text-transform: uppercase;
-    letter-spacing: 0.055em;
-    font-size: 0.66rem;
-    font-weight: 700;
-    margin-bottom: 0.18rem;
-}
-
-.sidebar-pill {
-    background: rgba(234, 88, 12, 0.14);
-    color: #9a3412 !important;
-    border: 1px solid var(--lp-accent-soft);
-}
-
-.sidebar-group {
-    border: 1px solid var(--lp-line);
-    border-radius: var(--lp-radius-sm);
-    padding: 0.65rem 0.7rem;
-    margin-bottom: 0.65rem;
-}
-
-/* ── Footer ─────────────────────────────────────────────────── */
-
-.zen-foot {
-    margin-top: 1.1rem;
-    padding-top: 1.1rem;
-    border-top: 1px solid var(--lp-line);
-    color: var(--lp-text-muted);
-    display: flex;
-    gap: 0.8rem;
-    justify-content: space-between;
-    flex-wrap: wrap;
-}
-
-.zen-foot a { font-weight: 600; }
-
-/* ── Misc ───────────────────────────────────────────────────── */
-
-.stAlert {
-    border: 1px solid var(--lp-line);
-    border-left: 3px solid var(--lp-accent);
-    border-radius: 10px;
-}
-
-.zen-settings-shell {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.55rem;
-    align-items: center;
-    margin-bottom: 0.8rem;
-}
-
-.zen-settings-shell .stExpander { flex: 1 1 320px; }
-.zen-summary-grid { margin-top: 0.25rem; margin-bottom: 0.45rem; }
-
-::selection { background: #ffe0c2; color: #7c2d12; }
-
-/* ── Hide Streamlit chrome ──────────────────────────────────── */
-
-#MainMenu, footer, header[data-testid="stHeader"] { display: none !important; }
-
-/* ── Responsive ─────────────────────────────────────────────── */
-
-@media (max-width: 980px) {
-    .block-container { padding: 1rem 0.85rem 0.75rem !important; }
-    .zen-kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .zen-flow { grid-template-columns: 1fr; }
-    .zen-bento-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .zen-bento-main { grid-column: span 2; }
-    .zen-step-strip { grid-template-columns: 1fr; margin-top: 0; }
-}
-
-@media (max-width: 640px) {
-    .block-container { padding: 0.75rem 0.65rem 0.65rem !important; }
-    .zen-kpi-strip { grid-template-columns: 1fr; }
-    .zen-header h1 { font-size: 1.55rem; }
-    .zen-flow-step { padding: 0.55rem 0.63rem; }
-    .zen-bento-grid { grid-template-columns: 1fr; }
-    .zen-bento-main { grid-column: auto; }
-}
-</style>""", unsafe_allow_html=True)
-
-st.markdown("""<style>
-:root {
-    --lp-bg: #f1f4f9;
-    --lp-font: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    --lp-font-heading: "SF Pro Display", "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-    --lp-font-mono: "SF Mono", "Menlo", "Consolas", "Monaco", "IBM Plex Mono", monospace;
-    --lp-surface: #ffffff;
-    --lp-surface-soft: #f5f7fb;
-    --lp-line: #e5ebf2;
-    --lp-accent: #ea580c;
-    --lp-accent-bright: #fb8c3c;
-    --lp-accent-soft: rgba(234, 88, 12, 0.10);
-    --lp-accent-soft-strong: rgba(234, 88, 12, 0.22);
-    --lp-glass-bg: rgba(255, 255, 255, 0.58);
-    --lp-glass-border: rgba(255, 255, 255, 0.64);
-    --lp-glass-shadow: 0 20px 44px rgba(15, 23, 42, 0.10);
-    --lp-text: #0f172a;
-    --lp-text-soft: #334155;
-    --lp-text-muted: #53617a;
-    --lp-shadow: 0 16px 32px rgba(15, 23, 42, 0.10);
-    --lp-shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.05);
-    --lp-radius: 18px;
-    --lp-radius-sm: 12px;
-}
-
-* {
-    box-sizing: border-box;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: geometricPrecision;
-}
-
-.stApp {
-    background:
-        radial-gradient(circle at 12% -12%, rgba(234, 88, 12, 0.06), transparent 38%),
-        radial-gradient(circle at 88% -2%, rgba(15, 23, 42, 0.03), transparent 44%),
-        var(--lp-bg) !important;
-    background-color: var(--lp-bg) !important;
-}
-
-.block-container {
-    position: relative;
-    z-index: 1;
-    max-width: 1320px !important;
-    padding: 0.06rem 0.95rem 0.5rem !important;
-}
-
-.zen-topbar-shell {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.42rem;
-    color: #475569;
-    font-family: var(--lp-font-mono);
-    font-size: 0.72rem;
-    margin-bottom: 0.2rem;
-}
-
-.zen-topbar-shell .stButton {
-    margin: 0 !important;
-}
-
-.zen-topbar-shell .stButton > button {
-    width: 2.45rem;
-    min-width: 2.45rem;
-    height: 2.3rem;
-    padding: 0;
-    border-radius: 11px;
-    border: 1px solid var(--lp-glass-border);
-    background: var(--lp-glass-bg);
-    backdrop-filter: blur(8px);
-}
-
-.zen-control-note {
-    font-size: 0.68rem;
-    color: var(--lp-text-muted);
-    font-family: var(--lp-font-mono);
-    margin: 0.1rem 0 0.2rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.zen-control-title {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.67rem;
-    color: var(--lp-text-soft);
-    font-family: var(--lp-font-mono);
-    font-weight: 700;
-    margin-bottom: 0.32rem;
-}
-
-.zen-control-rail {
-    border: 0;
-    backdrop-filter: none;
-    border-radius: 14px;
-    background: transparent;
-    padding: 0.22rem 0.02rem 0.15rem;
-    margin-bottom: 0.33rem;
-}
-
-.zen-priority-label {
-    font-size: 0.67rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-family: var(--lp-font-mono);
-    color: var(--lp-text-soft);
-    font-weight: 700;
-    margin: 0 0 0.18rem;
-}
-
-.zen-focus-rail {
-    background: color-mix(in srgb, var(--lp-glass-bg) 72%, #ffffff 28%);
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(9px);
-    border-radius: 12px;
-    padding: 0.34rem 0.5rem 0.29rem;
-    margin-top: 0.02rem;
-}
-
-.zen-topbar-shell .stButton > button {
-    width: 2.2rem;
-    min-width: 2.2rem;
-    height: 2.0rem;
-}
-
-.zen-topbar-shell {
-    margin-bottom: 0.12rem;
-}
-
-.zen-top-label {
-    font-weight: 700;
-    color: #334155;
-    letter-spacing: 0.015em;
-}
-
-.zen-control-drawer {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: min(30vw, 36rem);
-    min-width: 312px;
-    max-width: min(32vw, 420px);
-    height: 100vh;
-    max-height: 100vh;
-    transform: translateX(0);
-    overflow-y: auto;
-    border-left: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(18px) saturate(180%);
-    border-radius: 18px 0 0 18px;
-    background: linear-gradient(180deg, var(--lp-glass-bg) 0%, rgba(255, 255, 255, 0.7) 100%);
-    box-shadow: 0 18px 50px rgba(15, 23, 42, 0.17);
-    padding: 0.6rem 0.75rem;
-    z-index: 170;
-    animation: zenDrawerIn 0.22s cubic-bezier(0.2, 0.85, 0.35, 1) both;
-}
-
-.zen-control-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(2, 6, 23, 0.22);
-    backdrop-filter: blur(1px);
-    z-index: 169;
-    animation: zenFadeIn 0.18s ease both;
-}
-
-@keyframes zenDrawerIn {
-    from {
-        transform: translateX(30vw);
-        opacity: 0.8;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes zenFadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
-.zen-control-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-    gap: 0.7rem;
-    align-items: stretch;
-}
-
-.zen-control-strip {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.8rem;
-    margin-top: 0.1rem;
-    margin-bottom: 0.55rem;
-}
-
-.zen-pathogen-strip {
-    display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
-    gap: 0.54rem;
-    margin-top: 0.06rem;
-    margin-bottom: 0.16rem;
-}
-
-.zen-pathogen-label {
-    font-size: 0.66rem;
-    letter-spacing: 0.05em;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--lp-text-soft);
-    margin-bottom: 0.12rem;
-    font-family: var(--lp-font-mono);
-}
-
-.zen-quick-pathogen-label {
-    margin: 0.08rem 0 0.28rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.72rem;
-    font-family: var(--lp-font-mono);
-    color: var(--lp-text-soft);
-}
-
-.zen-quick-pathogen-label::before {
-    content: "";
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 999px;
-    background: var(--lp-accent);
-}
-
-.zen-hero-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 240px);
-    gap: 0.55rem;
-    align-items: center;
-    margin: 0.03rem 0 0.58rem;
-}
-
-.zen-hero-copy {
-    min-width: 0;
-}
-
-.zen-hero-shell .stButton {
-    margin: 0 !important;
-}
-
-.zen-hero-shell .stButton > button {
-    width: 100%;
-    height: 2.8rem;
-    padding: 0.55rem 0.7rem;
-    font-size: 0.86rem;
-    font-weight: 700;
-    border-radius: 12px;
-}
-
-.zen-hero-copy h2 {
-    margin: 0.05rem 0 0.26rem 0;
-    font-family: var(--lp-font-heading);
-    font-size: clamp(1.34rem, 2.6vw, 1.78rem);
-    letter-spacing: -0.025em;
-    color: var(--lp-text);
-    line-height: 1.2;
-}
-
-.zen-hero-copy .zen-body {
-    max-width: 58ch;
-    margin-bottom: 0.5rem;
-}
-
-.zen-chart-shell,
-.zen-chart {
-    margin-top: 0.1rem;
-}
-
-.zen-hero-chart-shell {
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(10px);
-    border-radius: var(--lp-radius);
-    background: linear-gradient(180deg, var(--lp-glass-bg) 0%, rgba(255, 255, 255, 0.66) 100%);
-    box-shadow: var(--lp-shadow-soft);
-    padding: 0.55rem;
-    margin-bottom: 0.6rem;
-}
-
-.zen-quick-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.6rem;
-    margin: 0.25rem 0 0.7rem;
-}
-
-.zen-quick-grid .zen-quick-metric {
-    min-height: 88px;
-    padding: 0.72rem 0.78rem;
-}
-
-.zen-context-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.42rem;
-    margin: 0.15rem 0 0.55rem;
-}
-
-.zen-context-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    border: 1px solid var(--lp-glass-border);
-    backdrop-filter: blur(8px);
-    border-radius: 999px;
-    padding: 0.32rem 0.6rem;
-    color: var(--lp-text);
-    background: var(--lp-glass-bg);
-    font-size: 0.73rem;
-    font-family: var(--lp-font);
-}
-
-.zen-context-chip.zen-risk-low {
-    background: #ecfdf5;
-    border-color: #86efac;
-    color: #065f46;
-}
-
-.zen-context-chip.zen-risk-medium {
-    background: #fffbeb;
-    border-color: #fcd34d;
-    color: #92400e;
-}
-
-.zen-context-chip.zen-risk-high {
-    background: #fef2f2;
-    border-color: #fca5a5;
-    color: #991b1b;
-}
-
-.zen-topbar-shell .stButton {
-    min-width: 2.0rem;
-}
-
-@media (max-width: 980px) {
-    .zen-control-grid {
-        grid-template-columns: 1fr;
-    }
-    .zen-control-drawer {
-        width: min(88vw, 320px);
-        min-width: 0;
-        border-radius: 14px 0 0 14px;
-    }
-    .zen-pathogen-strip {
-        grid-template-columns: 1fr;
-    }
-    .zen-quick-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .zen-context-strip {
-        gap: 0.32rem;
-    }
-    .zen-context-chip {
-        width: 100%;
-    }
-    .zen-topbar-shell {
-        gap: 0.32rem;
-        margin-bottom: 0.1rem;
-        font-size: 0.68rem;
-    }
-    .zen-topbar-shell .stButton > button {
-        width: 2.1rem;
-        min-width: 2.1rem;
-        height: 2.05rem;
-    }
-    .zen-hero-shell {
-        grid-template-columns: 1fr;
-        margin-bottom: 0.5rem;
-    }
-}
-
-@media (max-width: 640px) {
-    .block-container {
-        padding: 0.5rem 0.65rem 0.6rem !important;
-    }
-    .zen-topbar-shell {
-        margin-bottom: 0.05rem;
-    }
-    .zen-control-grid {
-        grid-template-columns: 1fr;
-    }
-    .zen-quick-grid {
-        grid-template-columns: 1fr;
-    }
-    .zen-hero-shell {
-        grid-template-columns: 1fr;
-        margin-bottom: 0.48rem;
-    }
-    .zen-topbar-shell {
-        margin-bottom: 0.03rem;
-        font-size: 0.64rem;
-        gap: 0.22rem;
-    }
-    .zen-topbar-shell .stButton > button {
-        width: 1.95rem;
-        min-width: 1.95rem;
-        height: 1.92rem;
-    }
-}
-</style>""", unsafe_allow_html=True)
+_DASHBOARD_STYLE_PATH = Path(__file__).resolve().parent.parent / "assets/css/dashboard_core.css"
+if _DASHBOARD_STYLE_PATH.exists():
+    st.markdown(f"<style>{_DASHBOARD_STYLE_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2166,6 +1037,77 @@ def _load_trends_cached(terms: tuple, timeframe: str = "today 3-m", geo: str = "
     if not terms:
         return pd.DataFrame()
     return fetch_google_trends(list(terms), timeframe=timeframe, geo=geo)
+
+
+@st.cache_data(ttl=10 * 60, show_spinner=False)
+def _load_surveillance_bundle_cached(
+    grippeweb_type: str,
+    region: str,
+    trends_terms: tuple[str, ...] = (),
+    trends_timeframe: str = "today 3-m",
+    trends_geo: str = "DE",
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        gw_future = executor.submit(_load_grippeweb_cached, grippeweb_type, region)
+        are_future = executor.submit(_load_are_cached, region)
+        trends_future = (
+            executor.submit(_load_trends_cached, trends_terms, trends_timeframe, trends_geo)
+            if trends_terms else None
+        )
+
+        grippeweb_df = gw_future.result()
+        are_df = are_future.result()
+        trends_df = trends_future.result() if trends_future is not None else pd.DataFrame()
+
+    return grippeweb_df, are_df, trends_df
+
+
+def _build_forecast_with_optional_ml(
+    lab_json: str,
+    wastewater_json: str,
+    forecast_horizon: int,
+    safety_buffer_pct: float,
+    stock_on_hand: int,
+    scenario_uplift_pct: float,
+    pathogen: str,
+    use_ml: bool,
+) -> tuple[pd.DataFrame, dict, pd.DataFrame | None, dict | None]:
+    if not use_ml:
+        forecast_df, kpis = _build_forecast_cached(
+            lab_json,
+            forecast_horizon,
+            safety_buffer_pct,
+            stock_on_hand,
+            scenario_uplift_pct,
+            pathogen,
+        )
+        return forecast_df, kpis, None, None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        forecast_future = executor.submit(
+            _build_forecast_cached,
+            lab_json,
+            forecast_horizon,
+            safety_buffer_pct,
+            stock_on_hand,
+            scenario_uplift_pct,
+            pathogen,
+        )
+        ml_future = executor.submit(
+            _run_ml_forecast_cached,
+            lab_json,
+            wastewater_json,
+            pathogen,
+            forecast_horizon,
+        )
+
+        forecast_df, kpis = forecast_future.result()
+        try:
+            ml_forecast, ml_model_info = ml_future.result()
+        except Exception:
+            ml_forecast, ml_model_info = None, None
+
+    return forecast_df, kpis, ml_forecast, ml_model_info
 
 
 @st.cache_data(ttl=10 * 60, show_spinner=False)
@@ -2578,10 +1520,6 @@ if "dashboard_controls_open" not in st.session_state:
     st.session_state.dashboard_controls_open = False
 
 
-def _toggle_dashboard_controls() -> None:
-    st.session_state.dashboard_controls_open = not st.session_state.dashboard_controls_open
-
-
 def _close_dashboard_controls() -> None:
     st.session_state.dashboard_controls_open = False
 
@@ -2634,7 +1572,7 @@ st.markdown(
 
 topbar_cols = st.columns([9, 1], gap="small")
 with topbar_cols[0]:
-    _home_url = "/"
+    _home_url = _public_url("/")
     st.markdown(
         '<div class="zen-topbar-shell">'
         f'<a class="zen-home-link" href="{_home_url}">Home</a>'
@@ -2651,7 +1589,7 @@ with topbar_cols[1]:
         key="toggle_dashboard_controls",
         width="stretch",
         help="Dashboard-Steuerung öffnen",
-        on_click=_toggle_dashboard_controls,
+        on_click=_open_dashboard_controls,
     )
 
 st.markdown('<div class="zen-pathogen-strip">', unsafe_allow_html=True)
@@ -2813,31 +1751,23 @@ if st.session_state.uploaded_lab_data is not None:
     _perf_mark("uploaded_merge", _merge_start)
 
 ml_model_info = None
-if use_ml:
-    _ml_start = _perf_start()
-    ml_forecast, ml_model_info = _run_ml_forecast_cached(
-        _lab_json,
-        _ww_json,
-        selected_pathogen,
-        forecast_horizon,
-    )
-    _perf_mark("ml_forecast", _ml_start)
-
 scenario_buffer_pct, scenario_uplift_pct, scenario_profile = _resolve_scenario(
     scenario_name=scenario_name,
     safety_buffer_base=int(safety_buffer),
     scenario_uplift_base=float(scenario_uplift),
 )
 _forecast_start = _perf_start()
-forecast_df, kpis = _build_forecast_cached(
+forecast_df, kpis, ml_forecast, ml_model_info = _build_forecast_with_optional_ml(
     _lab_json,
+    _ww_json,
     forecast_horizon,
     scenario_buffer_pct / 100,
     stock_on_hand,
     scenario_uplift_pct / 100,
     selected_pathogen,
+    use_ml,
 )
-_perf_mark("forecast_base", _forecast_start)
+_perf_mark("forecast_pipeline", _forecast_start)
 rev_col = [c for c in forecast_df.columns if "Revenue" in c]
 rev_col_name = rev_col[0] if rev_col else "Est. Revenue"
 _metadata_start = _perf_start()
@@ -3805,15 +2735,52 @@ if _dashboard_view == "Signale & Trends":
             st.caption("Schalten Sie diesen Bereich ein, wenn Sie GrippeWeb-/ARE-/Trends-Daten laden möchten.")
         else:
             st.caption("Surveillance-Signale — GrippeWeb & ARE")
-            sc1, sc2 = st.columns(2, gap="large")
+            gw_type = st.radio("GrippeWeb", ["ARE", "ILI"], horizontal=True, key="gw_type")
 
+            if "trends_custom_terms" not in st.session_state:
+                suggested_terms = PATHOGEN_SEARCH_TERMS.get(selected_pathogen, [])
+                st.session_state.trends_custom_terms = ", ".join(suggested_terms[:3])
+            custom_input = st.text_input(
+                "Suchbegriffe (max 5)",
+                value=st.session_state.get("trends_custom_terms", ""),
+                key="trends_input",
+                label_visibility="collapsed",
+                placeholder="z.B. Corona Test, Grippe",
+            )
+            st.session_state.trends_custom_terms = custom_input
+            tf = st.selectbox(
+                "Zeitraum",
+                ["today 3-m", "today 12-m", "today 5-y"],
+                index=1,
+                format_func=lambda x: {"today 3-m": "3M", "today 12-m": "12M", "today 5-y": "5J"}[x],
+                key="trends_tf",
+                label_visibility="collapsed",
+            )
+            user_terms = _normalize_terms(custom_input.split(","))
+
+            with st.status("Surveillance-Signale werden geladen ...", expanded=False):
+                gw_df, are_df, trends_df = _load_surveillance_bundle_cached(
+                    grippeweb_type=gw_type,
+                    region="Bundesweit",
+                    trends_terms=user_terms,
+                    trends_timeframe=tf,
+                    trends_geo="DE",
+                )
+
+            sc1, sc2 = st.columns(2, gap="large")
             with sc1:
-                gw_type = st.radio("GrippeWeb", ["ARE", "ILI"], horizontal=True, key="gw_type")
-                gw_df = _load_grippeweb_cached(gw_type, "Bundesweit")
+                st.caption("GrippeWeb")
                 if not gw_df.empty:
                     gw_r = gw_df[gw_df["date"] >= (today - pd.Timedelta(days=730))].copy()
                     fig_gw = go.Figure()
-                    fig_gw.add_trace(go.Scatter(x=gw_r["date"], y=gw_r["incidence"], fill="tozeroy", line=dict(color="#2563EB", width=2), fillcolor="rgba(37,99,235,0.08)", hovertemplate="%{x|%d %b}: %{y:,.1f}<extra></extra>"))
+                    fig_gw.add_trace(go.Scatter(
+                        x=gw_r["date"],
+                        y=gw_r["incidence"],
+                        fill="tozeroy",
+                        line=dict(color="#2563EB", width=2),
+                        fillcolor="rgba(37,99,235,0.08)",
+                        hovertemplate="%{x|%d %b}: %{y:,.1f}<extra></extra>",
+                    ))
                     fig_gw.update_layout(template="plotly_white", paper_bgcolor="rgba(255,255,255,1)", plot_bgcolor="rgba(248,250,252,1)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
                     fig_gw.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
                     fig_gw.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
@@ -3823,11 +2790,17 @@ if _dashboard_view == "Signale & Trends":
 
             with sc2:
                 st.caption("ARE-Konsultationen")
-                are_df = _load_are_cached("Bundesweit")
                 if not are_df.empty:
                     ar = are_df[are_df["date"] >= (today - pd.Timedelta(days=730))].copy()
                     fig_are = go.Figure()
-                    fig_are.add_trace(go.Scatter(x=ar["date"], y=ar["consultation_incidence"], fill="tozeroy", line=dict(color="#0284C7", width=2), fillcolor="rgba(2,132,199,0.1)", hovertemplate="%{x|%d %b}: %{y:,.0f}<extra></extra>"))
+                    fig_are.add_trace(go.Scatter(
+                        x=ar["date"],
+                        y=ar["consultation_incidence"],
+                        fill="tozeroy",
+                        line=dict(color="#0284C7", width=2),
+                        fillcolor="rgba(2,132,199,0.1)",
+                        hovertemplate="%{x|%d %b}: %{y:,.0f}<extra></extra>",
+                    ))
                     fig_are.update_layout(template="plotly_white", paper_bgcolor="rgba(255,255,255,1)", plot_bgcolor="rgba(248,250,252,1)", height=260, margin=dict(l=0, r=0, t=5, b=0), showlegend=False, hovermode="x unified")
                     fig_are.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
                     fig_are.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
@@ -3836,35 +2809,31 @@ if _dashboard_view == "Signale & Trends":
                     st.caption("Nicht verfuegbar.")
 
             # Google Trends (collapsed by default)
-            st.markdown("")
             with st.expander("Google Trends", expanded=False):
-                suggested_terms = PATHOGEN_SEARCH_TERMS.get(selected_pathogen, [])
-                if "trends_custom_terms" not in st.session_state:
-                    st.session_state.trends_custom_terms = ", ".join(suggested_terms[:3])
-
-                tc1, tc2 = st.columns([3, 1])
-                with tc1:
-                    custom_input = st.text_input("Suchbegriffe (max 5)", value=st.session_state.trends_custom_terms, key="trends_input", label_visibility="collapsed", placeholder="z.B. Corona Test, Grippe")
-                    st.session_state.trends_custom_terms = custom_input
-                with tc2:
-                    tf = st.selectbox("Zeitraum", ["today 3-m", "today 12-m", "today 5-y"], index=1, format_func=lambda x: {"today 3-m": "3M", "today 12-m": "12M", "today 5-y": "5J"}[x], key="trends_tf", label_visibility="collapsed")
-
-                user_terms = [t.strip() for t in custom_input.split(",") if t.strip()][:5]
-                if user_terms:
-                    trends_df = _load_trends_cached(tuple(user_terms), timeframe=tf, geo="DE")
-                    if not trends_df.empty:
-                        fig_t = go.Figure()
-                        colors = ["#EA580C", "#0284C7", "#2563EB", "#16A34A", "#F97316"]
-                        for i, col in enumerate([c for c in trends_df.columns if c != "date"]):
-                            fig_t.add_trace(go.Scatter(x=trends_df["date"], y=trends_df[col], name=col, line=dict(color=colors[i % 5], width=2)))
-                        fig_t.update_layout(template="plotly_white", paper_bgcolor="rgba(255,255,255,1)", plot_bgcolor="rgba(248,250,252,1)", height=280, margin=dict(l=0, r=0, t=5, b=0), legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#475569"), bgcolor="rgba(0,0,0,0)"), hovermode="x unified")
-                        fig_t.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
-                        fig_t.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
-                        st.plotly_chart(fig_t, width='stretch', key="trends")
-                    else:
-                        st.caption("Keine Daten (Rate-Limit oder zu nischig).")
+                if trends_df is None or trends_df.empty:
+                    st.caption("Keine Daten (Rate-Limit oder zu nischig).")
                 else:
-                    st.caption("Suchbegriffe eingeben.")
+                    fig_t = go.Figure()
+                    colors = ["#EA580C", "#0284C7", "#2563EB", "#16A34A", "#F97316"]
+                    for i, col in enumerate([c for c in trends_df.columns if c != "date"]):
+                        fig_t.add_trace(go.Scatter(
+                            x=trends_df["date"],
+                            y=trends_df[col],
+                            name=col,
+                            line=dict(color=colors[i % 5], width=2),
+                        ))
+                    fig_t.update_layout(
+                        template="plotly_white",
+                        paper_bgcolor="rgba(255,255,255,1)",
+                        plot_bgcolor="rgba(248,250,252,1)",
+                        height=280,
+                        margin=dict(l=0, r=0, t=5, b=0),
+                        legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(size=9, color="#475569"), bgcolor="rgba(0,0,0,0)"),
+                        hovermode="x unified",
+                    )
+                    fig_t.update_xaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
+                    fig_t.update_yaxes(gridcolor="rgba(255,255,255,0.02)", tickfont=dict(size=9, color="#475569"))
+                    st.plotly_chart(fig_t, width='stretch', key="trends")
 
 
 # ── Ansicht: Regional ────────────────────────────────────────────────────────
