@@ -177,7 +177,8 @@ def _inject_styles() -> None:
             flex-wrap: wrap;
             gap: 0.5rem;
         }
-        """
+        """,
+        shared=True,
     )
 
 
