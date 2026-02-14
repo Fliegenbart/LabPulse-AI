@@ -7,7 +7,7 @@ description: >
   visual polish. Also trigger when terms like "Design", "UX", "UI", "Layout",
   "Styling", "Theme", "Look and Feel", "visuell", "Gestaltung", "hübscher machen",
   or "schöner" appear. This skill should also activate when creating any HTML, React,
-  or Streamlit frontend — even if the user doesn't explicitly mention design.
+  or NiceGUI/Quasar frontend — even if the user doesn't explicitly mention design.
 ---
 
 # Frontend UX & Design Skill
@@ -18,7 +18,7 @@ should feel intentional and surprising, like it was designed by a human with str
 opinions and great taste.
 
 The enemy is "AI slop" — that generic, soulless look that screams "a language model
-made this." You know the type: Inter font, purple-to-blue gradient, rounded cards
+made this."
 with soft shadows on a white background. That's the aesthetic equivalent of elevator
 music. We're making jazz.
 
@@ -172,47 +172,53 @@ Charts and data displays deserve the same care as the rest of the UI.
 - Animate data transitions when values update
 - Consider sparklines and inline indicators alongside traditional charts
 
-## Streamlit-Specific Guidance
+## NiceGUI & Quasar Guidance
 
-Streamlit has CSS limitations but `st.markdown(unsafe_allow_html=True)` opens the
-door to custom design. Use it generously.
+The project uses NiceGUI (Quasar/Vue) for the production frontend.
 
-**Custom CSS injection pattern:**
+- **Layout**: Use `ui.row()`, `ui.column()`, `ui.card()`, `ui.expansion()` and
+  dedicated containers (`ui.page_sticky`, `ui.table`, `ui.tabs`) instead of
+  framework-agnostic legacy patterns.
+- **Styling**: Prefer Quasar/NiceGUI utility classes and custom CSS variables
+  over inline hacks. Use `ui.add_css(..., shared=True)` for global styles.
+- **Glassmorphism**: Keep the surface feeling by combining:
+  - muted gradients and subtle radial layers
+  - thin borders (`rgba(..., 0.24..0.4)`)
+  - blur + saturation (`backdrop-filter` where supported)
+- **Inputs/Controls**: Use NiceGUI native props like `.props("outlined dense")`
+  only where needed and avoid framework-agnostic DOM assumptions.
+- **Data cards**: Model metrics as cards in Quasar (`ui.card` + spacing tokens)
+  instead of CSS framework-dependent constructs.
+
+Example styling pattern:
+
 ```python
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=...');
-
-:root { --accent: #f59e0b; }
-
-/* Override Streamlit defaults */
-.stApp { background: var(--bg-primary); }
-[data-testid="stSidebar"] { background: var(--bg-surface); }
-.stMetric label { font-family: 'Your Font', sans-serif; }
-</style>
-""", unsafe_allow_html=True)
+ui.add_css(
+"""
+:root { --lp-bg: 10, 15, 27; }
+html, body, .q-page-container, .q-page {
+    background: linear-gradient(...);
+    font-family: 'DM Sans', 'SF Pro Display', -apple-system, sans-serif;
+}
+.lp-card { border: 1px solid rgba(148, 163, 184, 0.24); }
+""",
+shared=True,
+)
 ```
 
-**Custom component pattern** for when `st.metric` isn't enough:
+Reference pattern for custom metric cards:
+
 ```python
-st.markdown(f'''
-<div style="
-  background: linear-gradient(135deg, var(--bg-surface), rgba(...));
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.5rem;
-">
-  <span style="font-size: 0.75rem; color: var(--text-secondary);">LABEL</span>
-  <div style="font-size: 2rem; font-weight: 700;">{value}</div>
-</div>
-''', unsafe_allow_html=True)
+with ui.card().classes("lp-card lp-kpi"):
+    ui.label("Revenue").classes("lp-kpi-label")
+    ui.label("€ 120,000").classes("lp-kpi-value")
 ```
 
 ## Anti-Patterns Checklist
 
 Before delivering any frontend, verify you haven't fallen into these traps:
 
-- [ ] **Font check**: Am I using Inter, Roboto, Arial, or system fonts? → Change it
+- [ ] **Font check**: Am I using stock UI defaults? → Replace them with character-rich families
 - [ ] **Color check**: Is this purple-on-white or blue-gradient? → Rethink the palette
 - [ ] **Layout check**: Is this a symmetric 3-column card grid? → Add asymmetry
 - [ ] **Background check**: Is it a flat solid color? → Add depth
@@ -222,4 +228,4 @@ Before delivering any frontend, verify you haven't fallen into these traps:
 ## Reference Material
 
 For extended font pairings and palette examples, see `references/palettes.md`.
-For Streamlit-specific CSS override recipes, see `references/streamlit-css.md`.
+For deeper CSS references, see `references/palettes.md`.

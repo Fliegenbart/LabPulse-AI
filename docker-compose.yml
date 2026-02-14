@@ -5,7 +5,7 @@ services:
     container_name: labpulse-ai
     restart: unless-stopped
     expose:
-      - "8501"
+      - "8080"
     mem_limit: 1g
     cpus: 2.0
     environment:
@@ -22,7 +22,7 @@ services:
     volumes:
       - labpulse-data:/app/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8501/ || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

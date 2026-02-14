@@ -53,7 +53,7 @@ if docker ps --filter "name=labpulse-ai" --filter "status=running" -q | grep -q 
     echo ""
     echo "═══════════════════════════════════════════"
     echo "  ✅ LabPulse AI is live!"
-    echo "  → http://${SERVER_IP}:8501"
+    echo "  → http://${SERVER_IP}:8080"
     echo ""
     echo "  Your other services are untouched:"
     echo "    voxdrop.live         — no changes"

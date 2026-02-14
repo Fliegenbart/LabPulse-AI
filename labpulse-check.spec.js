@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 test('dashboard render marker', async ({ page }) => {
-  await page.goto('http://5.9.106.75:8501/?open=dashboard', { waitUntil: 'networkidle' });
+  await page.goto('https://labpulse.belegsync.com/dashboard', { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);
   const txt = await page.locator('body').innerText();
   console.log('---TXT_START---');

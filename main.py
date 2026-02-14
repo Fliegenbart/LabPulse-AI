@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -46,140 +47,8 @@ def _fmt_int(value: float | int | None, decimals: int = 0) -> str:
 
 
 def _inject_styles() -> None:
-    ui.add_css(
-        """
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-        :root {
-            --lp-bg: 5, 10, 22;
-            --lp-line: 95, 116, 145;
-            --lp-muted: 148, 163, 184;
-            --lp-text: 227, 237, 246;
-        }
-
-        html, body, .q-page-container, .q-page {
-            font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background:
-                radial-gradient(980px 360px at 5% -6%, rgba(56, 189, 248, 0.16), transparent 56%),
-                radial-gradient(980px 430px at 90% 2%, rgba(167, 139, 250, 0.17), transparent 58%),
-                linear-gradient(170deg, rgb(3, 7, 18), rgb(4, 9, 21) 50%, rgb(2, 6, 18));
-            color: rgb(var(--lp-text));
-        }
-
-        .lp-wrap {
-            width: min(1340px, 100%);
-            margin: 0 auto;
-            padding: 0.8rem 1rem 1.4rem;
-        }
-
-        .lp-title {
-            font-weight: 700;
-            letter-spacing: -0.015em;
-            color: rgb(var(--lp-text));
-        }
-
-        .lp-muted {
-            color: rgb(var(--lp-muted));
-        }
-
-        .lp-card {
-            border: 1px solid rgba(var(--lp-line), 0.36);
-            border-radius: 18px;
-            background: linear-gradient(150deg, rgba(15, 24, 38, 0.79), rgba(10, 16, 28, 0.72));
-            backdrop-filter: blur(16px) saturate(170%);
-            -webkit-backdrop-filter: blur(16px) saturate(170%);
-            box-shadow: 0 20px 48px rgba(2, 6, 23, 0.54);
-        }
-
-        .lp-kpi {
-            padding: 0.9rem;
-            min-height: 122px;
-        }
-
-        .lp-kpi-label {
-            color: rgb(var(--lp-muted));
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-size: 10px;
-            font-weight: 600;
-        }
-
-        .lp-kpi-value {
-            margin-top: 0.25rem;
-            line-height: 1.05;
-            font-size: 1.95rem;
-            letter-spacing: -0.02em;
-            font-weight: 700;
-        }
-
-        .lp-kpi-sub {
-            margin-top: 0.4rem;
-            color: rgb(var(--lp-muted));
-            font-size: 12px;
-        }
-
-        .lp-drawer {
-            background: linear-gradient(160deg, rgba(11, 18, 32, 0.95), rgba(9, 15, 27, 0.94));
-            color: rgb(var(--lp-text));
-            border-right: 1px solid rgba(148,163,184,0.24);
-        }
-
-        .lp-chip {
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.33);
-            padding: 0.1rem 0.55rem;
-            color: rgb(var(--lp-muted));
-            font-size: 11px;
-            letter-spacing: 0.03em;
-        }
-
-        .lp-landing {
-            min-height: calc(100vh - 64px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem 1rem;
-        }
-
-        .lp-landing-headline {
-            margin: 0;
-            letter-spacing: -0.03em;
-            font-size: clamp(2.0rem, 5vw, 3.4rem);
-            line-height: 1.06;
-        }
-
-        .lp-value-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.34rem 0.7rem;
-            border-radius: 999px;
-            border: 1px solid rgba(148, 163, 184, 0.35);
-            color: rgb(var(--lp-muted));
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.07em;
-            margin-bottom: 0.9rem;
-            width: fit-content;
-        }
-
-        .lp-hero-headline {
-            margin: 0;
-            font-size: clamp(1.7rem, 4.5vw, 3rem);
-            letter-spacing: -0.03em;
-            line-height: 1.07;
-            font-weight: 700;
-        }
-
-        .lp-cta {
-            margin-top: 1rem;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        """,
-        shared=True,
-    )
+    css_path = Path(__file__).resolve().parent / "assets" / "css" / "landing.css"
+    ui.add_css(css_path.read_text(encoding="utf-8"), shared=True)
 
 
 @dataclass
@@ -798,7 +667,7 @@ if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         title="LabPulse AI — Decision OS",
         host="0.0.0.0",
-        port=8501,
+        port=8080,
         show=False,
         dark=True,
     )
