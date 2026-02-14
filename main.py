@@ -717,27 +717,27 @@ def dashboard_page() -> None:
             value=state.pathogen,
             on_change=lambda e: _set_pathogen(e.value),
         ).classes("w-full mt-2")
+        ui.label("Horizon (Tage)").classes("lp-muted")
         ui.slider(
             min=7,
             max=28,
             step=7,
-            label="Horizon (Tage)",
             value=state.forecast_horizon,
             on_change=lambda e: _set_horizon(e.value),
         ).classes("w-full mt-2")
+        ui.label("Anstiegsszenario (%)").classes("lp-muted")
         ui.slider(
             min=0,
             max=50,
             step=5,
-            label="Anstiegsszenario (%)",
             value=state.virus_uplift_pct,
             on_change=lambda e: _set_uplift(e.value),
         ).classes("w-full")
+        ui.label("Sicherheits-Puffer (%)").classes("lp-muted")
         ui.slider(
             min=0,
             max=40,
             step=1,
-            label="Sicherheits-Puffer (%)",
             value=int(state.safety_buffer_pct * 100),
             on_change=lambda e: _set_buffer(e.value),
         ).classes("w-full")
